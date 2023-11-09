@@ -7,7 +7,7 @@ const logger = LoggerUtil.getLogger('ConfigManager')
 
 const sysRoot = process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME)
 
-const dataPath = path.join(sysRoot, '.helioslauncher')
+const dataPath = path.join(sysRoot, '.lunarlauncher')
 
 const launcherDir = require('@electron/remote').app.getPath('userData')
 
@@ -121,6 +121,8 @@ exports.save = function(){
  */
 exports.load = function(){
     let doLoad = true
+
+    console.log(configPath)
 
     if(!fs.existsSync(configPath)){
         // Create all parent directories.
@@ -790,4 +792,14 @@ exports.getAllowPrerelease = function(def = false){
  */
 exports.setAllowPrerelease = function(allowPrerelease){
     config.settings.launcher.allowPrerelease = allowPrerelease
+}
+
+exports.addOfflineAuthAccount = function(uuid, username, displayName){
+    config.selectedAccount = uuid
+    config.authenticationDatabase[uuid] = {
+        type: 'offline',
+        username: username.trim(),
+        displayName: displayName.trim()
+    }
+    return config.authenticationDatabase[uuid]
 }

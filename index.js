@@ -247,6 +247,7 @@ function createWindow() {
     Object.entries(data).forEach(([key, val]) => ejse.data(key, val))
 
     win.loadURL(pathToFileURL(path.join(__dirname, 'app', 'app.ejs')).toString())
+    win.webContents.openDevTools();
 
     /*win.once('ready-to-show', () => {
         win.show()

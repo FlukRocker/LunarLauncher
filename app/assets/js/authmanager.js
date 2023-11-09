@@ -9,6 +9,7 @@
  * @module authmanager
  */
 // Requirements
+const crypto = require('crypto-js');
 const ConfigManager          = require('./configmanager')
 const { LoggerUtil }         = require('helios-core')
 const { RestResponseStatus } = require('helios-core/common')
@@ -19,6 +20,12 @@ const { AZURE_CLIENT_ID }    = require('./ipcconstants')
 const log = LoggerUtil.getLogger('AuthManager')
 
 // Functions
+
+function md5Encode(inputString) {
+    const md5Hash = crypto.MD5(inputString)
+    return md5Hash.toString()
+}
+
 
 /**
  * Add a Mojang account. This will authenticate the given credentials with Mojang's
@@ -312,4 +319,18 @@ exports.validateSelected = async function(){
         return await validateSelectedMojangAccount()
     }
     
+}
+
+exports.addOfflineAccount = async function(username) {
+    try {
+        const uuid = md5Encode(username)
+        const ret = ConfigManager.addOfflineAuthAccount(uuid, username, username)
+        ConfigManager.setClientToken(null)
+        ConfigManager.save()
+        return ret
+        
+    } catch (err){
+        log.error(err)
+        return Promise.reject(mojangErrorDisplayable(MojangErrorCode.UNKNOWN))
+    }
 }

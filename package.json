@@ -1,7 +1,7 @@
 {
-  "name": "helioslauncher",
+  "name": "lunarlauncher",
   "version": "2.0.5",
-  "productName": "Helios Launcher",
+  "productName": "Lunar Launcher",
   "description": "Modded Minecraft Launcher",
   "author": "Daniel Scalzi (https://github.com/dscalzi/)",
   "license": "UNLICENSED",
@@ -25,6 +25,7 @@
   "dependencies": {
     "@electron/remote": "^2.0.11",
     "adm-zip": "^0.5.9",
+    "crypto-js": "^4.2.0",
     "discord-rpc-patch": "^4.0.1",
     "ejs": "^3.1.9",
     "ejs-electron": "^2.1.1",
