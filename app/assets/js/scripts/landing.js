@@ -3,6 +3,7 @@
  */
 // Requirements
 const cp                      = require('child_process')
+const { exec }                = require('child_process')
 const crypto                  = require('crypto')
 const { URL }                 = require('url')
 const {
@@ -311,7 +312,10 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
         effectiveJavaOptions.supported
     )
 
+    console.log('jvmDetails', jvmDetails)
+
     if(jvmDetails == null) {
+        console.log('No compatible JVM found.')
         // If the result is null, no valid Java installation was found.
         // Show this information to the user.
         setOverlayContent(
@@ -354,6 +358,7 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
         })
         toggleOverlay(true, true)
     } else {
+        console.log('Found JVM')
         // Java installation found, use this to launch the game.
         const javaExec = javaExecFromRoot(jvmDetails.path)
         ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), javaExec)

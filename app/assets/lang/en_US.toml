@@ -123,6 +123,8 @@ launcherUpdatesHeaderDesc = "Download, install, and review updates for the launc
 checkForUpdates = "Check for Updates"
 whatsNew = "What's New"
 updateReleaseNotes = "Update Release Notes"
+lunarAccount = "บัญชี LunarPixel"
+addLunarAccount = "+ เพิ่มบัญชี LunarPixel"
 
 [ejs.waiting]
 waitingText = "Waiting for Microsoft.."

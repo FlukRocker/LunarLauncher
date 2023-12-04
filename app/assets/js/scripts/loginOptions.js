@@ -1,6 +1,7 @@
 const loginOptionsCancelContainer = document.getElementById('loginOptionCancelContainer')
 const loginOptionMicrosoft = document.getElementById('loginOptionMicrosoft')
 const loginOptionMojang = document.getElementById('loginOptionMojang')
+const loginOptionLunar = document.getElementById('loginOptionLunar')
 const loginOptionsCancelButton = document.getElementById('loginOptionCancelButton')
 
 let loginOptionsCancellable = false
@@ -33,6 +34,15 @@ loginOptionMojang.onclick = (e) => {
         loginViewOnSuccess = loginOptionsViewOnLoginSuccess
         loginViewOnCancel = loginOptionsViewOnLoginCancel
         loginCancelEnabled(true)
+    })
+}
+
+loginOptionLunar.onclick = (e) => {
+    switchView(getCurrentView(), VIEWS.login_lunar, 500, 500, () => {
+        loginViewOnSuccess = loginOptionsViewOnLoginSuccess
+        loginViewOnCancel = loginOptionsViewOnLoginCancel
+        //loginCancelEnabled(true)
+        $(loginLunarCancelContainer).show()
     })
 }
 

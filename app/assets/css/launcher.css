@@ -377,7 +377,7 @@ body, button {
 }
 
 /* Main login container. */
-#loginContainer {
+.loginContainer {
     position: relative;
     display: flex;
     justify-content: center;
@@ -389,14 +389,14 @@ body, button {
 }
 
 /* Login cancel button styles. */
-#loginCancelContainer {
+.loginCancelContainer {
     position: absolute;
     top: 5%;
     right: 5%;
 }
 
 /* Login cancel button styles. */
-#loginCancelButton {
+.loginCancelButton {
     background: none;
     border: none;
     outline: none;

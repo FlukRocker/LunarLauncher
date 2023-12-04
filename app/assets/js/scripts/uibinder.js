@@ -18,6 +18,7 @@ const VIEWS = {
     landing: '#landingContainer',
     loginOptions: '#loginOptionsContainer',
     login: '#loginContainer',
+    login_lunar: '#loginLunarContainer',
     settings: '#settingsContainer',
     welcome: '#welcomeContainer',
     waiting: '#waitingContainer'
@@ -224,16 +225,38 @@ function syncModConfigurations(data){
     ConfigManager.save()
 }
 
+function getJavaPaths() {
+    return new Promise((resolve, reject) => {
+        const whichCommand = os.platform() === 'win32' ? 'where java' : 'which java'
+        exec(whichCommand, (error, stdout, stderr) => {
+            if (error) {
+                reject(stderr)
+            } else {
+                const javaPaths = stdout.trim().split(os.EOL).filter(path => path.trim() !== '')
+                resolve(javaPaths)
+            }
+        })
+    })
+}
+
+function selectFirstJavaPath(javaPaths) {
+    return javaPaths.length > 0 ? javaPaths[0] : null
+}
+
 /**
  * Ensure java configurations are present for the available servers.
  * 
  * @param {Object} data The distro index object.
  */
-function ensureJavaSettings(data) {
+async function ensureJavaSettings(data) {
+
+    const javaPaths = await getJavaPaths()
+    const selectedJavaPath = selectFirstJavaPath(javaPaths)
 
     // Nothing too fancy for now.
     for(const serv of data.servers){
         ConfigManager.ensureJavaConfig(serv.rawServer.id, serv.effectiveJavaOptions, serv.rawServer.javaOptions?.ram)
+        ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), selectedJavaPath)
     }
 
     ConfigManager.save()

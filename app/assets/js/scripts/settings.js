@@ -620,6 +620,7 @@ function refreshAuthAccountSelected(uuid){
 
 const settingsCurrentMicrosoftAccounts = document.getElementById('settingsCurrentMicrosoftAccounts')
 const settingsCurrentMojangAccounts = document.getElementById('settingsCurrentMojangAccounts')
+const settingsCurrentLunarAccounts = document.getElementById('settingsCurrentLunarAccounts')
 
 /**
  * Add auth account elements for each one stored in the authentication database.
@@ -634,6 +635,7 @@ function populateAuthAccounts(){
 
     let microsoftAuthAccountStr = ''
     let mojangAuthAccountStr = ''
+    let lunarAuthAcoountStr = ''
 
     authKeys.forEach((val) => {
         const acc = authAccounts[val]
@@ -664,6 +666,8 @@ function populateAuthAccounts(){
 
         if(acc.type === 'microsoft') {
             microsoftAuthAccountStr += accHtml
+        } else if (acc.type === 'lunar') {
+            lunarAuthAcoountStr += accHtml
         } else {
             mojangAuthAccountStr += accHtml
         }
@@ -672,6 +676,7 @@ function populateAuthAccounts(){
 
     settingsCurrentMicrosoftAccounts.innerHTML = microsoftAuthAccountStr
     settingsCurrentMojangAccounts.innerHTML = mojangAuthAccountStr
+    settingsCurrentLunarAccounts.innerHTML = lunarAuthAcoountStr
 }
 
 /**
@@ -1453,7 +1458,7 @@ function populateAboutVersionInformation(){
  */
 function populateReleaseNotes(){
     $.ajax({
-        url: 'https://github.com/dscalzi/HeliosLauncher/releases.atom',
+        url: 'https://github.com/FlukRocker/LunarLauncherPublic/releases.atom',
         success: (data) => {
             const version = 'v' + remote.app.getVersion()
             const entries = $(data).find('entry')
