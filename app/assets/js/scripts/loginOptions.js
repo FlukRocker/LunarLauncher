@@ -42,7 +42,7 @@ loginOptionLunar.onclick = (e) => {
         loginViewOnSuccess = loginOptionsViewOnLoginSuccess
         loginViewOnCancel = loginOptionsViewOnLoginCancel
         //loginCancelEnabled(true)
-        $(loginLunarCancelContainer).show()
+        $(lunarLoginCancelContainer).show()
     })
 }
 
