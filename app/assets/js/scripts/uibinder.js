@@ -440,7 +440,11 @@ function setSelectedAccount(uuid){
     const authAcc = ConfigManager.setSelectedAccount(uuid)
     ConfigManager.save()
     updateSelectedAccount(authAcc)
-    validateSelectedAccount()
+    
+    const targetAcc = ConfigManager.getAuthAccount(uuid)
+    if(targetAcc.type != 'lunar'){
+        validateSelectedAccount()
+    }
 }
 
 // Synchronous Listener

@@ -608,7 +608,7 @@ exports.setMinRAM = function(serverid, minRAM){
  * @returns {string} The maximum amount of memory for JVM initialization.
  */
 exports.getMaxRAM = function(serverid){
-    return config.javaConfig[serverid].maxRAM
+    return config.javaConfig[serverid] ? config.javaConfig[serverid].maxRAM : '4G'
 }
 
 /**

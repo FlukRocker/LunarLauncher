@@ -358,6 +358,16 @@ document.getElementById('settingsAddMicrosoftAccount').onclick = (e) => {
     })
 }
 
+// Bind the add microsoft account button.
+document.getElementById('settingsAddLunarAccount').onclick = (e) => {
+    switchView(getCurrentView(), VIEWS.login_lunar, 500, 500, () => {
+        loginViewOnCancel = VIEWS.settings
+        loginViewOnSuccess = VIEWS.settings
+        loginCancelEnabled(true)
+        prepareAccountsTab()
+    })
+}
+
 // Bind reply for Microsoft Login.
 ipcRenderer.on(MSFT_OPCODE.REPLY_LOGIN, (_, ...arguments_) => {
     if (arguments_[0] === MSFT_REPLY_TYPE.ERROR) {
@@ -517,6 +527,21 @@ function processLogOut(val, isLastAccount){
         msAccDomElementCache = parent
         switchView(getCurrentView(), VIEWS.waiting, 500, 500, () => {
             ipcRenderer.send(MSFT_OPCODE.OPEN_LOGOUT, uuid, isLastAccount)
+        })
+    } else if(targetAcc.type == 'lunar') {
+        AuthManager.removeLunarAccount(uuid).then(() => {
+            prepareAccountsTab()
+            if(!isLastAccount && uuid === prevSelAcc.uuid){
+                const selAcc = ConfigManager.getSelectedAccount()
+                refreshAuthAccountSelected(selAcc.uuid)
+                updateSelectedAccount(selAcc)
+            }
+            if(isLastAccount) {
+                loginOptionsCancelEnabled(false)
+                loginOptionsViewOnLoginSuccess = VIEWS.settings
+                loginOptionsViewOnLoginCancel = VIEWS.loginOptions
+                switchView(getCurrentView(), VIEWS.loginOptions)
+            }
         })
     } else {
         AuthManager.removeMojangAccount(uuid).then(() => {

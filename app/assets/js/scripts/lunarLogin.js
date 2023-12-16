@@ -139,13 +139,15 @@ lunarLoginForm.onsubmit = () => { return false }
 
 // Bind login button behavior.
 lunarLoginButton.addEventListener('click', () => {
+    let username = lunarLoginUsername.value
+    if(username == '') {
+        return;
+    }
     // Disable form.
     formDisabled(true)
 
     // Show loading stuff.
     loginLoading(true)
-
-    let username = lunarLoginUsername.value
     console.log(username, md5Encode(username))
 
     AuthManager.addLunarAccount(username).then((value) => {
