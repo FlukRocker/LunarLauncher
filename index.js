@@ -92,6 +92,11 @@ ipcMain.on('distributionIndexDone', (event, res) => {
     event.sender.send('distributionIndexDone', res)
 })
 
+ipcMain.on('relaunchApp', (event, res) => {
+    app.relaunch()
+    app.exit()
+})
+
 // Handle trash item.
 ipcMain.handle(SHELL_OPCODE.TRASH_ITEM, async (event, ...args) => {
     try {

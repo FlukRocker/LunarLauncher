@@ -1603,7 +1603,18 @@ async function prepareSettings(first = false) {
     } else {
         await prepareModsTab()
     }
-    await initSettingsValues()
+    try {
+        await initSettingsValues()
+    } catch (error) {
+        console.log('asdasd')
+        console.error(error)
+        setTimeout(() => {
+            ipcRenderer.send('relaunchApp')
+        }, 3000)
+        await (async () => new Promise(resolve => {
+            console.log('Stuck forever')
+        }))()
+    }
     prepareAccountsTab()
     await prepareJavaTab()
     prepareAboutTab()
