@@ -1,6 +1,6 @@
 {
   "name": "lunarlauncher",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "productName": "Lunar Launcher",
   "description": "Modded Minecraft Launcher",
   "author": "FlukRocker (https://github.com/FlukRocker/)",
@@ -34,7 +34,7 @@
     "fs-extra": "^11.1.1",
     "github-syntax-dark": "^0.5.0",
     "got": "^11.8.5",
-    "helios-core": "~2.1.0",
+    "helios-core": "~2.0.5",
     "helios-distribution-types": "^1.2.0",
     "jquery": "^3.7.1",
     "lodash.merge": "^4.6.2",

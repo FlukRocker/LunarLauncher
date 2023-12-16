@@ -256,7 +256,9 @@ async function ensureJavaSettings(data) {
     // Nothing too fancy for now.
     for(const serv of data.servers){
         ConfigManager.ensureJavaConfig(serv.rawServer.id, serv.effectiveJavaOptions, serv.rawServer.javaOptions?.ram)
-        ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), selectedJavaPath)
+        if(ConfigManager.getJavaExecutable(serv.rawServer.id) == null){
+            ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), selectedJavaPath)
+        }
     }
 
     ConfigManager.save()
