@@ -48,13 +48,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FlukRocker/LunarLauncherPublic.git"
+    "url": "git+https://github.com/FlukRocker/LunarLauncher.git"
   },
   "build": {
     "publish": [{
         "provider": "github",
         "owner": "FlukRocker",
-        "repo": "LunarLauncherPublic"
+        "repo": "LunarLauncher"
     }]
   }
 }
