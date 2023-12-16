@@ -159,6 +159,7 @@ lunarLoginButton.addEventListener('click', () => {
                 if(lunarLoginViewOnSuccess === VIEWS.settings){
                     await prepareSettings()
                 }
+                $('#lunarLoginContainer').hide();
                 lunarLoginViewOnSuccess = VIEWS.landing // Reset this for good measure.
                 loginCancelEnabled(false) // Reset this for good measure.
                 lunarLoginViewCancelHandler = null // Reset this for good measure.
