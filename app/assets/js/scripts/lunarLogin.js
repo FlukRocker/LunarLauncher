@@ -11,10 +11,6 @@ const lunarLoginCancelContainer  = document.getElementById('lunarLoginCancelCont
 const lunarLoginCancelButton     = document.getElementById('lunarLoginCancelButton')
 const lunarLoginEmailError       = document.getElementById('lunarLoginEmailError')
 const lunarLoginUsername         = document.getElementById('lunarLoginUsername')
-const lunarLoginPasswordError    = document.getElementById('lunarLoginPasswordError')
-const lunarLoginPassword         = document.getElementById('lunarLoginPassword')
-const lunarCheckmarkContainer    = document.getElementById('lunarCheckmarkContainer')
-const lunarLoginRememberOption   = document.getElementById('lunarLoginRememberOption')
 const lunarLoginButton           = document.getElementById('lunarLoginButton')
 const lunarLoginForm             = document.getElementById('lunarLoginForm')
 
@@ -58,32 +54,11 @@ function validateEmail(value){
         } else {
             lunarLoginEmailError.style.opacity = 0
             lu = true
-            if(lp){
-                loginDisabled(false)
-            }
+            loginDisabled(false)
         }
     } else {
         lu = false
         showError(lunarLoginEmailError, Lang.queryJS('login.error.requiredValue'))
-        loginDisabled(true)
-    }
-}
-
-/**
- * Validate that the password field is not empty.
- * 
- * @param {string} value The password value.
- */
-function validatePassword(value){
-    if(value){
-        lunarLoginPasswordError.style.opacity = 0
-        lp = true
-        if(lu){
-            loginDisabled(false)
-        }
-    } else {
-        lp = false
-        showError(lunarLoginPasswordError, Lang.queryJS('login.error.invalidValue'))
         loginDisabled(true)
     }
 }
@@ -93,17 +68,10 @@ lunarLoginUsername.addEventListener('focusout', (e) => {
     validateEmail(e.target.value)
     shakeError(lunarLoginEmailError)
 })
-lunarLoginPassword.addEventListener('focusout', (e) => {
-    validatePassword(e.target.value)
-    shakeError(lunarLoginPasswordError)
-})
 
 // Validate input for each field.
 lunarLoginUsername.addEventListener('input', (e) => {
     validateEmail(e.target.value)
-})
-lunarLoginPassword.addEventListener('input', (e) => {
-    validatePassword(e.target.value)
 })
 
 /**
@@ -141,13 +109,6 @@ function formDisabled(v){
     loginDisabled(v)
     lunarLoginCancelButton.disabled = v
     lunarLoginUsername.disabled = v
-    lunarLoginPassword.disabled = v
-    if(v){
-        lunarCheckmarkContainer.setAttribute('disabled', v)
-    } else {
-        lunarCheckmarkContainer.removeAttribute('disabled')
-    }
-    lunarLoginRememberOption.disabled = v
 }
 
 let lunarLoginViewOnSuccess = VIEWS.landing
@@ -165,7 +126,6 @@ function loginCancelEnabled(val){
 lunarLoginCancelButton.onclick = (e) => {
     switchView(getCurrentView(), lunarLoginViewOnCancel, 500, 500, () => {
         lunarLoginUsername.value = ''
-        lunarLoginPassword.value = ''
         loginCancelEnabled(false)
         if(lunarLoginViewCancelHandler != null){
             lunarLoginViewCancelHandler()
