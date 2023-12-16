@@ -47,6 +47,10 @@ const loggerLanding = LoggerUtil.getLogger('Landing')
 
 /* Launch Progress Wrapper Functions */
 
+function md5Encode(inputString) {
+    return crypto.createHash('md5').update(inputString).digest('hex')
+}
+
 /**
  * Show/hide the loading area.
  * 

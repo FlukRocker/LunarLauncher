@@ -40,6 +40,7 @@ webFrame.setVisualZoomLevelLimits(1, 1)
 let updateCheckListener
 if(!isDev){
     ipcRenderer.on('autoUpdateNotification', (event, arg, info) => {
+        console.log(info)
         switch(arg){
             case 'checking-for-update':
                 loggerAutoUpdater.info('Checking for update..')

@@ -21,6 +21,11 @@ const log = LoggerUtil.getLogger('AuthManager')
 
 // Functions
 
+exports.md5Encode = function(inputString) {
+    const md5Hash = crypto.MD5(inputString)
+    return md5Hash.toString()
+}
+
 function md5Encode(inputString) {
     const md5Hash = crypto.MD5(inputString)
     return md5Hash.toString()
@@ -161,6 +166,22 @@ exports.addMicrosoftAccount = async function(authCode) {
     ConfigManager.save()
 
     return ret
+}
+
+exports.addLunarAccount = async function(username) {
+    try {
+        const uuid = md5Encode(username)
+        const ret = ConfigManager.addLunarAuthAccount(uuid, username)
+        if(ConfigManager.getClientToken() == null){
+            ConfigManager.setClientToken(md5Encode(username))
+        }
+        ConfigManager.save()
+        return ret
+        
+    } catch (err){
+        log.error(err)
+        return Promise.reject(mojangErrorDisplayable(MojangErrorCode.UNKNOWN))
+    }
 }
 
 /**
@@ -319,18 +340,4 @@ exports.validateSelected = async function(){
         return await validateSelectedMojangAccount()
     }
     
-}
-
-exports.addOfflineAccount = async function(username) {
-    try {
-        const uuid = md5Encode(username)
-        const ret = ConfigManager.addOfflineAuthAccount(uuid, username, username)
-        ConfigManager.setClientToken(null)
-        ConfigManager.save()
-        return ret
-        
-    } catch (err){
-        log.error(err)
-        return Promise.reject(mojangErrorDisplayable(MojangErrorCode.UNKNOWN))
-    }
 }

@@ -20,8 +20,6 @@ const lunarLoginForm             = document.getElementById('lunarLoginForm')
 
 // Control variables.
 
-
-
 /**
  * Show a login error.
  * 
@@ -152,9 +150,9 @@ function formDisabled(v){
     lunarLoginRememberOption.disabled = v
 }
 
-// let loginViewOnSuccess = VIEWS.landing
-// let loginViewOnCancel = VIEWS.settings
-// let loginViewCancelHandler
+let lunarLoginViewOnSuccess = VIEWS.landing
+let lunarLoginViewOnCancel = VIEWS.settings
+let lunarLoginViewCancelHandler
 
 function loginCancelEnabled(val){
     if(val){
@@ -165,13 +163,13 @@ function loginCancelEnabled(val){
 }
 
 lunarLoginCancelButton.onclick = (e) => {
-    switchView(getCurrentView(), loginViewOnCancel, 500, 500, () => {
+    switchView(getCurrentView(), lunarLoginViewOnCancel, 500, 500, () => {
         lunarLoginUsername.value = ''
         lunarLoginPassword.value = ''
         loginCancelEnabled(false)
-        if(loginViewCancelHandler != null){
-            loginViewCancelHandler()
-            loginViewCancelHandler = null
+        if(lunarLoginViewCancelHandler != null){
+            lunarLoginViewCancelHandler()
+            lunarLoginViewCancelHandler = null
         }
     })
 }
@@ -188,7 +186,48 @@ lunarLoginButton.addEventListener('click', () => {
     loginLoading(true)
 
     let username = lunarLoginUsername.value
-    let password = lunarLoginPassword.value
-    let remember = lunarLoginRememberOption.checked
-    console.log(username, password, remember)
+    console.log(username, md5Encode(username))
+
+    AuthManager.addLunarAccount(username).then((value) => {
+        updateSelectedAccount(value)
+        loginButton.innerHTML = loginButton.innerHTML.replace(Lang.queryJS('login.loggingIn'), Lang.queryJS('login.success'))
+        $('.circle-loader').toggleClass('load-complete')
+        $('.checkmark').toggle()
+        setTimeout(() => {
+            switchView(VIEWS.login, lunarLoginViewOnSuccess, 500, 500, async () => {
+                // Temporary workaround
+                if(lunarLoginViewOnSuccess === VIEWS.settings){
+                    await prepareSettings()
+                }
+                lunarLoginViewOnSuccess = VIEWS.landing // Reset this for good measure.
+                loginCancelEnabled(false) // Reset this for good measure.
+                lunarLoginViewCancelHandler = null // Reset this for good measure.
+                lunarLoginUsername.value = ''
+                $('.circle-loader').toggleClass('load-complete')
+                $('.checkmark').toggle()
+                loginLoading(false)
+                loginButton.innerHTML = loginButton.innerHTML.replace(Lang.queryJS('login.success'), Lang.queryJS('login.login'))
+                formDisabled(false)
+            })
+        }, 1000)
+    }).catch((displayableError) => {
+        loginLoading(false)
+
+        let actualDisplayableError
+        if(isDisplayableError(displayableError)) {
+            msftLoginLogger.error('Error while logging in.', displayableError)
+            actualDisplayableError = displayableError
+        } else {
+            // Uh oh.
+            msftLoginLogger.error('Unhandled error during login.', displayableError)
+            actualDisplayableError = Lang.queryJS('login.error.unknown')
+        }
+
+        setOverlayContent(actualDisplayableError.title, actualDisplayableError.desc, Lang.queryJS('login.tryAgain'))
+        setOverlayHandler(() => {
+            formDisabled(false)
+            toggleOverlay(false)
+        })
+        toggleOverlay(true)
+    })
 })

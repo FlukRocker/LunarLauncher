@@ -403,6 +403,22 @@ exports.addMicrosoftAuthAccount = function(uuid, accessToken, name, mcExpires, m
     return config.authenticationDatabase[uuid]
 }
 
+exports.addLunarAuthAccount = function(uuid, username) {
+    /* expiresAt = current time + 1 year */
+    const expiresAt = new Date()
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1)
+    config.selectedAccount = uuid
+    config.authenticationDatabase[uuid] = {
+        type: 'lunar',
+        username: username,
+        displayName: username,
+        uuid: uuid,
+        expiresAt: expiresAt
+    }
+    return config.authenticationDatabase[uuid]
+
+}
+
 /**
  * Remove an authenticated account from the database. If the account
  * was also the selected account, a new one will be selected. If there
