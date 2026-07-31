@@ -608,7 +608,7 @@ mod tests {
     fn parses_the_shipped_sample_distribution() {
         // docs/sample_distribution.json is the upstream reference document;
         // if our model drifts from the spec this fails.
-        let raw = include_str!("../../../docs/sample_distribution.json");
+        let raw = include_str!("../../docs/sample_distribution.json");
         let d: Distribution = serde_json::from_str(raw).expect("sample distro must parse");
         assert!(!d.servers.is_empty());
         let main = d.main_server().unwrap();

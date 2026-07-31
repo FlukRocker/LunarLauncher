@@ -4,83 +4,101 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Lunar Launcher — an Electron-based modded Minecraft launcher. It is a rebranded fork of [HeliosLauncher](https://github.com/dscalzi/HeliosLauncher) by Daniel Scalzi; most files still carry upstream naming (`helios-core`, `SealCircle.png`, WesterosCraft strings). The README is still the upstream one and describes Helios, not this fork.
+Lunar Launcher — a modded Minecraft launcher built with Tauri 2 (Rust) and
+React + TypeScript. It began as a fork of
+[HeliosLauncher](https://github.com/dscalzi/HeliosLauncher) (Electron + Node);
+the Electron implementation was removed in favour of a full Rust rewrite. The
+last commit containing it is `9e7f5b0` — useful as a reference when porting
+remaining features, since much of the Rust is a direct port of specific JS
+files and the commit messages name them.
 
-Node 22 is required (`.nvmrc`, `engines`). There is no test suite.
-
-### Syncing with upstream
-
-The fork shares history with HeliosLauncher (diverged at `ab7e3c3`), so upstream can be merged directly:
-
-```console
-git remote add upstream https://github.com/dscalzi/HeliosLauncher.git
-git fetch upstream
-git merge upstream/master
-```
-
-Last synced to upstream `86e4316` (Helios 2.2.1). `main` is published, so prefer merging over rebasing — a rebase would rewrite pushed history and break the `Oi-Dev` branch.
-
-Conflicts recur in predictable places: `package.json` (keep the Lunar identity block, `publish` script, `build.publish`, and `crypto-js`), `_custom.toml` (branding), and `landing.js`. For `package-lock.json`, take upstream's and re-run `npm install` rather than hand-merging.
+Requires Node 22, a Rust toolchain, and the platform Tauri prerequisites.
 
 ## Commands
 
 ```console
-npm start           # run the launcher (electron .)
-npm run lint        # eslint over the repo
-npm run dist        # build installer for the current platform (output: dist/)
-npm run dist:win    # / dist:mac / dist:linux
-npm run publish     # electron-builder -p always → GitHub release (needs GH_TOKEN)
+npm install
+npm run app:dev                    # vite + tauri, hot reload
+npm run app:build                  # production build with installers
+npm run app:build -- --no-bundle   # production binary only, much faster
+npm run test:rust                  # cargo test
+npm run lint                       # tsc --noEmit
+
+# One test, or the network/launch integration tests (ignored by default):
+cargo test --manifest-path src-tauri/Cargo.toml <name>
+cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture
 ```
 
-`.github/workflows/build.yml` runs `npm ci && npm run dist` on every push across macOS/Ubuntu/Windows.
+### Two traps worth knowing before you debug anything
 
-Debugging: launch with the VS Code configs documented in README.md (main process via `node_modules/electron/cli.js`, renderer via `--remote-debugging-port=9222`). In the running app, DevTools is `ctrl + shift + i`.
+- **Never use plain `cargo build`.** Debug *or* release, it yields a binary
+  pointing at `devUrl` rather than the embedded frontend, because asset
+  embedding is gated behind a Cargo feature only `tauri build` sets. The window
+  opens blank and no command reaches Rust. It looks like a catastrophic
+  failure and is purely a build-mode artifact.
+- **`hermes-mc.net` no longer resolves,** so a default start hits the fatal
+  error screen. Use `LUNAR_DISTRO_URL` (an `http(s)://` URL, `file://` URL, or
+  plain path) — `dev-distribution.json` is an unmodded 1.20.1 server that
+  exercises the full launch path.
 
 ## Architecture
 
-### Two processes, thin main
+The webview renders and calls commands; everything privileged happens in Rust.
+There is no Node runtime in the shipped app, which is the fundamental
+difference from the Electron original and the reason each module below had to
+be a real port rather than a wrapper.
 
-`index.js` is the entire main process. It only handles things the renderer cannot: creating the frameless `BrowserWindow`, opening the Microsoft OAuth/logout `BrowserWindow`s and scraping the redirect URI for the auth code, `electron-updater` wiring, `shell.trashItem`, the macOS menu, and `relaunchApp`. All IPC channel names live in `app/assets/js/ipcconstants.js`.
+- **`config.rs`** — the persisted `config.json`. Deliberately byte-compatible
+  with what Electron wrote so existing installs keep their accounts.
+- **`distribution.rs`** — the distribution index: spec model, remote fetch with
+  disk-cache fallback, `mcVersionAtLeast`, and the platform/architecture
+  precedence rules that resolve a server's effective Java options.
+- **`java.rs`** — JVM discovery. Candidates are *executed* to read their real
+  properties, because a directory name says nothing reliable about
+  architecture or vendor. Filters to 64-bit and rejects x86 JVMs on arm64 hosts
+  so nothing runs under Rosetta.
+- **`dl.rs`** — version manifest → version JSON → asset index, then SHA1
+  validation of every asset, library and the client jar. Parallel downloads
+  with retries and atomic temp+rename writes.
+- **`process_builder.rs`** — classpath, native extraction, and JVM arguments
+  for both the 1.13+ structured form and the pre-1.13 flat form. The subtlest
+  code here; mistakes produce a game that silently fails to start.
+- **`microsoft.rs`** — auth code → MS token → Xbox Live → XSTS → Minecraft
+  token → profile, plus refresh. XSTS error codes map to actionable messages.
+- **`commands.rs`** — the IPC surface. Keep commands coarse-grained: one
+  meaningful operation each, not getters, since every call crosses a boundary.
 
-The renderer runs with `nodeIntegration: true` / `contextIsolation: false`, so renderer scripts `require()` Node modules directly. Business logic lives in the renderer, not the main process.
+`src/lib/api.ts` mirrors these types by hand. Change a Rust struct that crosses
+the boundary and you must update it there too — nothing enforces this.
 
-### Views are one page
+### Config compatibility is load-bearing
 
-`app/app.ejs` is the only page loaded. It `include`s every view partial (`welcome`, `login`, `login_lunar`, `waiting`, `loginOptions`, `settings`, `landing`, plus `frame` and `overlay`) into a single DOM. Each partial ends with a `<script src>` tag for its controller in `app/assets/js/scripts/`, so **all view scripts share one global scope** — that is why `.eslintrc.json` disables `no-undef`/`no-unused-vars` for `app/assets/js/scripts/*.js`.
-
-Navigation is not routing: `switchView(current, next)` in `uibinder.js` jQuery-fades container IDs listed in the `VIEWS` map. `uicore.js` loads first and must not depend on internal modules (it is the crash-safe layer: frame buttons, auto-update listeners, `window.eval` disabling). `uibinder.js` loads second and owns startup sequencing — distribution load, account validation, deciding whether to show welcome/loginOptions/landing.
-
-Gotchas when editing views:
-- `require('./assets/js/...')` in renderer scripts resolves relative to `app/app.ejs` (the page URL), not the script's own file.
-- `app.ejs` has a CSP `script-src` with a sha256 hash. Changing the inline script there requires updating the hash.
-- **Cross-script globals.** Because all view scripts share one scope, a `const` in one file is a dependency of another with nothing to signal it. `landing.js` declares `md5Encode` (consumed by `lunarLogin.js`) and `exec` (consumed by `getJavaPaths` in `uibinder.js`). Removing a seemingly unused import in one file can break a different one — grep the whole `scripts/` directory, not just the file you are editing.
-
-### Modules (`app/assets/js/`)
-
-- **configmanager.js** — the single source of persisted state, `~/.lunarlauncher/config.json` (note: fork-specific directory name). Holds accounts, per-server Java config, resolution, mod configurations. Load/save is explicit (`ConfigManager.save()`); `validateKeySet` merges new default keys into existing user configs on upgrade.
-- **distromanager.js** — wraps `helios-core`'s `DistributionAPI` against `REMOTE_DISTRO_URL` (currently `https://hermes-mc.net/downloads/lunarpixel/distribution.json`). The distribution index defines servers, modules, and Java requirements; see `docs/distro.md` and `docs/sample_distribution.json`. **This host currently returns NXDOMAIN**, so a fresh install fails at startup with "Fatal Error: Unable to Load Distribution Index". To develop without it, drop a valid `distribution.json` into the launcher directory (`~/Library/Application Support/Lunar Launcher/` on macOS) — `DistributionAPI` falls back to that local copy.
-- **preloader.js** — Electron preload. Runs before the window: loads config, force-injects `commonDir`/`instanceDir` into `DistroAPI`, fetches the distribution, picks a default server, cleans the temp natives dir, then fires `distributionIndexDone`.
-- **authmanager.js** — three account types: `microsoft` (full MSA→Xbox→MC flow via `helios-core/microsoft`, with token refresh in `validateSelected`), `lunar` (fork-specific offline mode: UUID is just the MD5 of the entered username, no server validation), and `mojang` (Yggdrasil — the code path still exists but `authserver.mojang.com` is permanently shut down, so it is dead). `validateSelected` only branches on `microsoft` vs everything else.
-- **processbuilder.js** — builds and spawns the JVM. Split by Minecraft version: `_constructJVMArguments112` vs `_constructJVMArguments113` (1.13+ uses the manifest's argument templates). Also handles classpath assembly, native extraction to a temp dir, LiteLoader, mod list JSON/arg generation, and the autoconnect flag.
-- **langloader.js** — all user-facing strings come from TOML. `app/assets/lang/en_US.toml` is the base; `_custom.toml` is merged on top and is where fork branding/URLs are overridden. `[ejs.*]` keys are read from templates via `lang(...)`; `[js.*]` keys from code via `Lang.queryJS(...)`.
-- **dropinmodutil.js**, **serverstatus.js**, **discordwrapper.js** (Discord RPC, marked WIP), **isdev.js**.
+`JavaConfig` carries explicit `#[serde(rename = "minRAM")]` / `"maxRAM"`.
+Serde's `camelCase` renders these as `minRam`/`maxRam`, which fails to
+deserialise a real config — and since a parse failure falls back to defaults,
+that silently wipes the user's accounts and settings. This was a live bug found
+in testing. `electron_written_config_survives_a_round_trip` guards it; do not
+"simplify" those renames away.
 
 ### Launch flow
 
-`landing.js:dlAsync()` is the whole "play" path: resolve server from distro → `validateSelectedJvm` / download Java if missing (`asyncSystemScan`, `downloadJava`) → `FullRepair` module from `helios-core` validates and redownloads assets in a child process → `new ProcessBuilder(...).build()` spawns the game → the launcher watches stdout for the game window handshake before hiding progress UI.
+`launch_game` in `commands.rs` is the whole path: resolve version → validate →
+download what's missing → locate a compatible JVM → build arguments → spawn.
+Progress is pushed to the frontend as `launch://progress` events rather than
+returned, because the download is often multi-gigabyte.
+
+It refuses servers whose distribution declares Forge/Fabric, since mod loaders
+are not ported. That refusal is deliberate — starting a modded server without
+its loader produces a confusing failure deep in the game rather than a clear
+message.
 
 ## Conventions
 
-`eslint.config.mjs` (flat config, ESLint 9) enforces via `@stylistic`: 4-space indent, single quotes, **no semicolons**, no `var`, and `linebreak-style: windows` (CRLF).
+Rust is standard rustfmt. TypeScript follows the existing files: 4-space
+indent, single quotes, no semicolons.
 
-Note that `npm run lint` currently reports ~7200 errors, almost all `linebreak-style`. This is inherited from upstream — a pristine `upstream/master` checkout fails its own lint the same way (~6900 errors), because several tracked files are LF while the rule demands CRLF. **Do not mass-convert line endings**: it would produce a repo-wide diff and cause a conflict in every future upstream merge. To see only real problems, filter them out:
-
-```console
-npx eslint . 2>&1 | grep -v linebreak-style
-```
-
-Releases are cut by bumping `version` in `package.json` and committing with the version number as the message (see `git log`). `electron-builder.yml` publishes to the `FlukRocker/LunarLauncher` GitHub repo, but the in-app macOS update URL in `uicore.js` points at `FlukRocker/LunarLauncherPublic` — keep that in mind when changing release targets.
-
-## Known issues
-
-- **The Lunar login button is unreachable.** `loginOptions.ejs` has the `loginOptionLunar` button commented out, but `loginOptions.js:40` still binds `loginOptionLunar.onclick` unconditionally. That throws `TypeError: Cannot set properties of null`, which aborts the rest of the script — so `loginOptionsCancelButton.onclick` and everything below it never binds either, leaving the cancel button on the login-options screen dead. Fixing it means deciding whether the Lunar option should be visible (uncomment the button) or not (guard the binding).
+When porting the remaining features, prefer faithfulness to the original JS
+over improving it, and say so in a comment where the original did something
+surprising — several ported functions reproduce quirks (the first-matching-rule
+early return in library rules, the fullscreen argument rewrite) that look like
+bugs but are what the game expects.
