@@ -202,3 +202,34 @@ export const launchApi = {
     /** Validates, downloads and launches. Resolves with the game's PID. */
     launchGame: () => invoke<number>('launch_game')
 }
+
+// --- Settings, accounts, Discord, updates ---------------------------------
+
+export interface JavaSettings {
+    minRam: string
+    maxRam: string
+    executable: string | null
+    jvmOptions: string[]
+}
+
+export const settingsApi = {
+    getJavaConfig: (serverId: string) =>
+        invoke<JavaSettings>('get_java_config', { serverId }),
+    saveJavaConfig: (serverId: string, settings: JavaSettings) =>
+        invoke<void>('save_java_config', { serverId, settings })
+}
+
+export const authApi = {
+    /** Opens the Microsoft consent window and completes the token chain. */
+    microsoftLogin: () => invoke<Account>('microsoft_login'),
+    microsoftLogout: (uuid: string) => invoke<boolean>('microsoft_logout', { uuid }),
+    /** Refreshes the selected account if expired. False means re-login needed. */
+    validateSelected: () => invoke<boolean>('validate_selected_account')
+}
+
+export const discordApi = {
+    connect: () => invoke<boolean>('discord_connect'),
+    setDetails: (details: string, stateLine: string) =>
+        invoke<void>('discord_set_details', { details, stateLine }),
+    disconnect: () => invoke<void>('discord_disconnect')
+}

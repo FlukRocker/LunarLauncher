@@ -1,9 +1,11 @@
 pub mod commands;
 pub mod config;
+pub mod discord;
 pub mod distribution;
 pub mod dl;
 pub mod java;
 pub mod error;
+pub mod microsoft;
 pub mod paths;
 pub mod process_builder;
 
@@ -24,7 +26,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
+        .manage(discord::DiscordState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::get_distribution,
@@ -40,6 +44,14 @@ pub fn run() {
             commands::save_settings,
             commands::scan_java,
             commands::launch_game,
+            commands::microsoft_login,
+            commands::validate_selected_account,
+            commands::microsoft_logout,
+            commands::get_java_config,
+            commands::save_java_config,
+            commands::discord_connect,
+            commands::discord_set_details,
+            commands::discord_disconnect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

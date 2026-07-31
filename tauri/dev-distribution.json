@@ -1,0 +1,23 @@
+{
+    "version": "1.0.0",
+    "rss": "",
+    "servers": [
+        {
+            "id": "Vanilla-1.20.1",
+            "name": "Vanilla 1.20.1 (dev test)",
+            "description": "Unmodded 1.20.1, for exercising the launch pipeline end to end.",
+            "icon": "",
+            "version": "1.0.0",
+            "address": "mc.example.com:25565",
+            "minecraftVersion": "1.20.1",
+            "javaOptions": {
+                "supported": ">=17.x",
+                "suggestedMajor": 17,
+                "ram": { "recommended": 3072, "minimum": 2048 }
+            },
+            "mainServer": true,
+            "autoconnect": false,
+            "modules": []
+        }
+    ]
+}

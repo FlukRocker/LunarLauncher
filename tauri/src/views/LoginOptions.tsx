@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, isApiError } from '../lib/api'
+import { api, authApi, isApiError } from '../lib/api'
 
 /**
  * Account selection.
@@ -11,6 +11,7 @@ import { api, isApiError } from '../lib/api'
  */
 export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
     const [mode, setMode] = useState<'choose' | 'lunar'>('choose')
+    const [msftBusy, setMsftBusy] = useState(false)
     const [username, setUsername] = useState('')
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -31,6 +32,19 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
             setError(isApiError(err) ? err.message : String(err))
         } finally {
             setBusy(false)
+        }
+    }
+
+    const loginMicrosoft = async () => {
+        setMsftBusy(true)
+        setError(null)
+        try {
+            await authApi.microsoftLogin()
+            onLoggedIn()
+        } catch (err: unknown) {
+            setError(isApiError(err) ? err.message : String(err))
+        } finally {
+            setMsftBusy(false)
         }
     }
 
@@ -74,13 +88,14 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
         <div className="view view--centered">
             <div className="panel">
                 <h2 className="panel__title">Choose an account type</h2>
-                <button className="button button--primary" disabled title="Not yet ported">
-                    Log in with Microsoft
+                <button
+                    className="button button--primary"
+                    disabled={msftBusy}
+                    onClick={() => void loginMicrosoft()}
+                >
+                    {msftBusy ? 'Waiting for Microsoft…' : 'Log in with Microsoft'}
                 </button>
-                <p className="panel__hint">
-                    Microsoft login is not implemented in the Tauri build yet — see the migration
-                    notes in tauri/README.md.
-                </p>
+                {error && <p className="panel__error">{error}</p>}
                 <button className="button" onClick={() => setMode('lunar')}>
                     Offline account
                 </button>

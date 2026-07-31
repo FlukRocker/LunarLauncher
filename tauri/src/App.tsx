@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { api, isApiError, type Bootstrap } from './lib/api'
+import { api, authApi, discordApi, isApiError, type Account, type Bootstrap } from './lib/api'
 import { Frame } from './components/Frame'
 import { FatalError } from './views/FatalError'
 import { Landing } from './views/Landing'
 import { Loading } from './views/Loading'
+import { Settings } from './views/Settings'
 import { LoginOptions } from './views/LoginOptions'
 import { Welcome } from './views/Welcome'
 
@@ -14,12 +15,24 @@ import { Welcome } from './views/Welcome'
  * fading container IDs in and out. Here it is ordinary React state — one view
  * is mounted at a time.
  */
-export type View = 'loading' | 'welcome' | 'loginOptions' | 'landing' | 'fatal'
+export type View = 'loading' | 'welcome' | 'loginOptions' | 'landing' | 'settings' | 'fatal'
 
 export function App() {
     const [view, setView] = useState<View>('loading')
     const [boot, setBoot] = useState<Bootstrap | null>(null)
     const [fatal, setFatal] = useState<string | null>(null)
+    const [accounts, setAccounts] = useState<Account[]>([])
+    const [selected, setSelected] = useState<Account | null>(null)
+    const [serverId, setServerId] = useState<string | null>(null)
+
+    const refreshAccounts = () => {
+        void api.getAccounts().then(setAccounts)
+        void api.getConfig().then((c) => {
+            setServerId(c.selectedServer)
+            const uuid = c.selectedAccount
+            setSelected(uuid ? (c.authenticationDatabase[uuid] ?? null) : null)
+        })
+    }
 
     useEffect(() => {
         let cancelled = false
@@ -28,6 +41,11 @@ export function App() {
             .then((result) => {
                 if (cancelled) return
                 setBoot(result)
+                setAccounts(result.accounts)
+                setSelected(result.selectedAccount)
+                void api.getConfig().then((c) => setServerId(c.selectedServer))
+                // Presence is decorative; never let it block startup.
+                void discordApi.connect().catch(() => {})
 
                 if (!result.distributionLoaded) {
                     // Same terminal state as the Electron launcher: without a
@@ -40,7 +58,13 @@ export function App() {
                 } else if (result.selectedAccount == null) {
                     setView('loginOptions')
                 } else {
-                    setView('landing')
+                    // An expired Microsoft token means the account cannot
+                    // launch; send the user back to sign in rather than
+                    // failing later with a confusing error.
+                    void authApi
+                        .validateSelected()
+                        .then((ok) => setView(ok ? 'landing' : 'loginOptions'))
+                        .catch(() => setView('landing'))
                 }
             })
             .catch((err: unknown) => {
@@ -61,9 +85,27 @@ export function App() {
                 {view === 'loading' && <Loading />}
                 {view === 'welcome' && <Welcome onContinue={() => setView('loginOptions')} />}
                 {view === 'loginOptions' && (
-                    <LoginOptions onLoggedIn={() => setView('landing')} />
+                    <LoginOptions
+                        onLoggedIn={() => {
+                            refreshAccounts()
+                            setView('landing')
+                        }}
+                    />
                 )}
-                {view === 'landing' && boot && <Landing account={boot.selectedAccount} />}
+                {view === 'landing' && boot && (
+                    <Landing
+                        account={selected}
+                        onOpenSettings={() => setView('settings')}
+                    />
+                )}
+                {view === 'settings' && (
+                    <Settings
+                        serverId={serverId}
+                        accounts={accounts}
+                        onClose={() => setView('landing')}
+                        onAccountsChanged={refreshAccounts}
+                    />
+                )}
                 {view === 'fatal' && <FatalError message={fatal} />}
             </main>
         </>

@@ -3,8 +3,27 @@
 Ground-up rewrite of the Electron launcher onto Tauri 2 (Rust backend) with a
 React + TypeScript frontend.
 
-**Status: vanilla Minecraft launches; modded servers do not.** The Electron app
-on `main` remains the shipping launcher. See [Remaining work](#remaining-work).
+**Status: vanilla Minecraft launches; modded servers do not.** Microsoft and
+offline login, settings, and Discord presence all work. The Electron app on
+`main` remains the shipping launcher. See [Remaining work](#remaining-work).
+
+## Trying it manually
+
+```console
+cd tauri
+npm install
+npm run app:build -- --no-bundle
+LUNAR_DISTRO_URL=./dev-distribution.json ./src-tauri/target/release/lunarlauncher
+```
+
+`dev-distribution.json` declares a single unmodded 1.20.1 server, so PLAY
+exercises the whole pipeline: validate, download (~700 MB the first time),
+locate a JDK, and spawn the game. Pointing at a modded index instead is fine —
+everything works except PLAY, which refuses loaders rather than starting a
+broken game.
+
+Both login paths work. Offline needs only a username; Microsoft opens a real
+consent window and runs the full token chain.
 
 ## Layout
 
@@ -87,10 +106,25 @@ config creation → account selection UI.
   extraction, and JVM argument construction for both the 1.13+ structured form
   and the pre-1.13 flat form, including conditional-argument rule evaluation
   and full `${...}` placeholder substitution.
+- **Microsoft authentication** (`microsoft.rs`) — the full chain: auth code →
+  MS token → Xbox Live → XSTS → Minecraft token → profile, plus refresh on
+  startup when the stored token has expired. The consent page opens in a
+  dedicated Tauri window whose navigation is watched for the redirect. XSTS
+  failure codes are translated into messages a player can act on ("no Xbox
+  profile", "child account", "not entitled to Java Edition") rather than a raw
+  HTTP status. Redirect parsing uses a real URL parser, avoiding the
+  encoded-character bug upstream fixed in #388.
+- **Settings** — game resolution/fullscreen/autoconnect, per-server Java
+  config (RAM, JVM options, explicit executable) with a JVM scanner, and
+  account management. Edits are batched and committed on Save, matching the
+  Electron view.
+- **Discord Rich Presence** (`discord.rs`) — connects using the ids from the
+  distribution index. Every failure is logged and swallowed; presence must
+  never interfere with launching.
 - **Frontend shell** — view switching (replacing the `VIEWS` map and jQuery
   fades), a custom titlebar using Tauri drag regions instead of the
-  Chromium-only `-webkit-app-region`, offline login, and a PLAY button wired to
-  the real pipeline with a live progress bar.
+  Chromium-only `-webkit-app-region`, both login paths, settings, and a PLAY
+  button wired to the real pipeline with a live progress bar.
 
 ### How far the launch path is verified
 
@@ -133,16 +167,14 @@ Roughly in dependency order. The first item is by far the largest.
 3. **JDK auto-download.** Discovery is done; fetching a JDK when none matches
    (Temurin/Corretto per `effectiveJavaOptions`) is not, so the user must have
    a suitable JDK installed.
-4. **Microsoft authentication.** The OAuth flow needs a second Tauri window
-   plus the MSA → Xbox Live → XSTS → Minecraft token exchange and refresh.
-   Currently stubbed out in the UI.
-5. **Remaining views.** Settings (the Electron `settings.js` is 1,624 lines,
-   covering mods, Java config, accounts and updates), the news feed, and
-   drop-in mod management.
-6. **Auto-update.** `electron-updater` has no direct equivalent; use
-   `tauri-plugin-updater`, which needs a signing key and an update manifest.
-7. **Discord RPC**, currently absent.
-8. **Visual parity.** `app/assets/css/launcher.css` has ~50 `-webkit-` rules
+4. **Auto-update.** `tauri-plugin-updater` is wired in and configured in
+   `tauri.conf.json`, but left **inactive**: it needs a signing keypair
+   (`npm run tauri signer generate`), the public key in `plugins.updater.pubkey`,
+   and a `latest.json` manifest published alongside releases. Until those
+   exist, turning it on would fail at runtime.
+5. **News feed and drop-in mods.** The remaining pieces of the Electron
+   settings/landing views — the RSS news reader and manual mod management.
+6. **Visual parity.** `app/assets/css/launcher.css` has ~50 `-webkit-` rules
    (scrollbar styling, filters, `app-region`) that are Chromium-only. Tauri
    renders in WKWebView / WebView2 / WebKitGTK, so each needs a
    standards-based replacement. The current CSS is a minimal baseline, not a

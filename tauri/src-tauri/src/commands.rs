@@ -442,3 +442,283 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
 
     Ok(pid)
 }
+
+// ---------------------------------------------------------------------------
+// Microsoft authentication
+// ---------------------------------------------------------------------------
+
+/// Open the Microsoft consent page in a dedicated window and complete the
+/// login when it redirects back with an authorization code.
+///
+/// Replaces the `MSFT_AUTH_OPEN_LOGIN` BrowserWindow dance in index.js. The
+/// window is watched for navigation to the redirect URI; the code is then
+/// exchanged through the full token chain and the account is persisted.
+#[tauri::command]
+pub async fn microsoft_login(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<Account> {
+    use crate::microsoft;
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    const WINDOW_LABEL: &str = "msft-login";
+
+    // Reusing a stale window leaves the user staring at a dead page.
+    if let Some(existing) = tauri::Manager::get_webview_window(&app, WINDOW_LABEL) {
+        let _ = existing.close();
+    }
+
+    let url = microsoft::authorize_url()
+        .parse()
+        .map_err(|e| Error::Other(format!("Bad authorize URL: {e}")))?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<std::result::Result<String, String>>();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+
+    let window = WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(url))
+        .title("Microsoft Login")
+        .inner_size(520.0, 600.0)
+        .center()
+        .on_navigation({
+            let tx = std::sync::Arc::clone(&tx);
+            move |url| {
+                let s = url.to_string();
+                if s.starts_with(microsoft::REDIRECT_URI) {
+                    let outcome = match microsoft::extract_code_from_redirect(&s) {
+                        Some(code) => Ok(code),
+                        None => Err(microsoft::extract_error_from_redirect(&s)
+                            .unwrap_or_else(|| "Login was not completed.".into())),
+                    };
+                    if let Some(tx) = tx.lock().unwrap().take() {
+                        let _ = tx.send(outcome);
+                    }
+                    // Stop the webview actually loading the redirect page.
+                    return false;
+                }
+                true
+            }
+        })
+        .build()
+        .map_err(|e| Error::Other(format!("Failed to open login window: {e}")))?;
+
+    // A closed window must resolve the wait, or this command hangs forever.
+    window.on_window_event({
+        let tx = std::sync::Arc::clone(&tx);
+        move |event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(tx) = tx.lock().unwrap().take() {
+                    let _ = tx.send(Err("Login window was closed.".into()));
+                }
+            }
+        }
+    });
+
+    let outcome = rx
+        .await
+        .map_err(|_| Error::Other("Login window closed unexpectedly.".into()))?;
+
+    if let Some(w) = tauri::Manager::get_webview_window(&app, WINDOW_LABEL) {
+        let _ = w.close();
+    }
+
+    let code = outcome.map_err(Error::Other)?;
+    let auth = microsoft::full_auth_flow(&code, false).await?;
+
+    let account = Account::Microsoft {
+        access_token: auth.mc_access_token,
+        username: auth.profile.name.clone(),
+        uuid: auth.profile.id.clone(),
+        display_name: auth.profile.name,
+        expires_at: microsoft::expiry_from_now(auth.mc_expires_in),
+        microsoft: crate::config::MicrosoftTokens {
+            access_token: auth.ms_access_token,
+            refresh_token: auth.ms_refresh_token,
+            expires_at: microsoft::expiry_from_now(auth.ms_expires_in),
+        },
+    };
+
+    state.config.with_mut(|c| {
+        c.selected_account = Some(auth.profile.id.clone());
+        c.authentication_database
+            .insert(auth.profile.id.clone(), account.clone());
+    })?;
+    state.config.save()?;
+
+    tracing::info!(user = %account.display_name(), "Microsoft login complete");
+    Ok(account)
+}
+
+/// Refresh the selected account's tokens if they have expired.
+///
+/// Port of `validateSelected`. Offline accounts never need refreshing;
+/// Microsoft accounts refresh through the same chain using the stored refresh
+/// token. Returns true when the account is usable.
+#[tauri::command]
+pub async fn validate_selected_account(state: State<'_, AppState>) -> Result<bool> {
+    use crate::microsoft;
+
+    let current = state.config.with(|c| {
+        c.selected_account
+            .as_ref()
+            .and_then(|u| c.authentication_database.get(u))
+            .cloned()
+    })?;
+
+    let Some(account) = current else { return Ok(false) };
+
+    let Account::Microsoft { uuid, expires_at, microsoft: tokens, .. } = &account else {
+        // Offline accounts are always valid.
+        return Ok(true);
+    };
+
+    if !microsoft::is_expired(expires_at) {
+        return Ok(true);
+    }
+
+    tracing::info!("Minecraft token expired; refreshing");
+    let auth = match microsoft::full_auth_flow(&tokens.refresh_token, true).await {
+        Ok(a) => a,
+        Err(err) => {
+            tracing::error!(%err, "Token refresh failed; user must sign in again");
+            return Ok(false);
+        }
+    };
+
+    let uuid = uuid.clone();
+    state.config.with_mut(|c| {
+        if let Some(Account::Microsoft {
+            access_token,
+            expires_at,
+            microsoft,
+            ..
+        }) = c.authentication_database.get_mut(&uuid)
+        {
+            *access_token = auth.mc_access_token.clone();
+            *expires_at = microsoft::expiry_from_now(auth.mc_expires_in);
+            microsoft.access_token = auth.ms_access_token.clone();
+            microsoft.refresh_token = auth.ms_refresh_token.clone();
+            microsoft.expires_at = microsoft::expiry_from_now(auth.ms_expires_in);
+        }
+    })?;
+    state.config.save()?;
+    Ok(true)
+}
+
+/// Open Microsoft's logout page so the next login can pick a different
+/// account, then drop the local record.
+#[tauri::command]
+pub async fn microsoft_logout(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    uuid: String,
+) -> Result<bool> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    let url = crate::microsoft::LOGOUT_ENDPOINT
+        .parse()
+        .map_err(|e| Error::Other(format!("Bad logout URL: {e}")))?;
+
+    // Best-effort: clearing the Microsoft session is a convenience, so a
+    // failure here should not block removing the local account.
+    if let Ok(w) = WebviewWindowBuilder::new(&app, "msft-logout", WebviewUrl::External(url))
+        .title("Microsoft Logout")
+        .inner_size(520.0, 600.0)
+        .center()
+        .build()
+    {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let _ = w.close();
+    }
+
+    state.config.remove_account(&uuid)
+}
+
+// ---------------------------------------------------------------------------
+// Java configuration (settings view)
+// ---------------------------------------------------------------------------
+
+/// Per-server java settings shown in the settings view.
+#[derive(Debug, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaSettings {
+    pub min_ram: String,
+    pub max_ram: String,
+    pub executable: Option<std::path::PathBuf>,
+    pub jvm_options: Vec<String>,
+}
+
+#[tauri::command]
+pub fn get_java_config(state: State<'_, AppState>, server_id: String) -> Result<JavaSettings> {
+    state
+        .config
+        .with(|c| c.java_config.get(&server_id).cloned())?
+        .map(|j| JavaSettings {
+            min_ram: j.min_ram,
+            max_ram: j.max_ram,
+            executable: j.executable,
+            jvm_options: j.jvm_options,
+        })
+        .ok_or_else(|| Error::Other(format!("No java config for {server_id}.")))
+}
+
+#[tauri::command]
+pub fn save_java_config(
+    state: State<'_, AppState>,
+    server_id: String,
+    settings: JavaSettings,
+) -> Result<()> {
+    state.config.with_mut(|c| {
+        if let Some(j) = c.java_config.get_mut(&server_id) {
+            j.min_ram = settings.min_ram;
+            j.max_ram = settings.max_ram;
+            j.executable = settings.executable;
+            j.jvm_options = settings.jvm_options;
+        }
+    })?;
+    state.config.save()
+}
+
+// ---------------------------------------------------------------------------
+// Discord
+// ---------------------------------------------------------------------------
+
+/// Connect Rich Presence for the selected server, using the ids the
+/// distribution index supplies. Silently does nothing when the index carries
+/// no discord block.
+#[tauri::command]
+pub fn discord_connect(
+    state: State<'_, AppState>,
+    discord: State<'_, crate::discord::DiscordState>,
+) -> Result<bool> {
+    let guard = state.distribution.lock().unwrap();
+    let Some(distro) = guard.as_ref() else { return Ok(false) };
+    let Some(global) = &distro.discord else { return Ok(false) };
+
+    let server_id = state.config.with(|c| c.selected_server.clone())?;
+    let server = server_id.as_ref().and_then(|id| distro.server_by_id(id));
+    let Some(server_discord) = server.and_then(|s| s.discord.as_ref()) else {
+        return Ok(false);
+    };
+
+    discord.initialize(
+        &global.client_id,
+        "Waiting for Client..",
+        &format!("Server: {}", server_discord.short_id),
+        &server_discord.large_image_key,
+        &server_discord.large_image_text,
+        &global.small_image_key,
+        &global.small_image_text,
+    );
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn discord_set_details(
+    discord: State<'_, crate::discord::DiscordState>,
+    details: String,
+    state_line: String,
+) {
+    discord.set_details(&details, &state_line);
+}
+
+#[tauri::command]
+pub fn discord_disconnect(discord: State<'_, crate::discord::DiscordState>) {
+    discord.shutdown();
+}

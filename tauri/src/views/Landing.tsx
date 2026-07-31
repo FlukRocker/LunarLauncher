@@ -14,7 +14,13 @@ import {
  * locate a JVM, spawn the game — and streams progress back over the
  * `launch://progress` event.
  */
-export function Landing({ account }: { account: Account | null }) {
+export function Landing({
+    account,
+    onOpenSettings
+}: {
+    account: Account | null
+    onOpenSettings: () => void
+}) {
     const [server, setServer] = useState<Server | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [progress, setProgress] = useState<LaunchProgress | null>(null)
@@ -52,6 +58,9 @@ export function Landing({ account }: { account: Account | null }) {
         <div className="view view--landing">
             <header className="landing__header">
                 <div className="landing__account">{account ? account.displayName : 'No account'}</div>
+                <button className="button" onClick={onOpenSettings}>
+                    Settings
+                </button>
             </header>
 
             <footer className="landing__footer">
