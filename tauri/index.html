@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lunar Launcher</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      Startup error trap. The system webview has no visible console, so an
+      exception before React mounts would otherwise show as a blank window.
+    -->
+    <script>
+      window.addEventListener('error', function (e) {
+        document.body.innerHTML =
+          '<pre style="color:#ff6b6b;background:#171614;padding:16px;' +
+          'font:12px monospace;white-space:pre-wrap;height:100%;margin:0">' +
+          'Startup error:\n\n' + (e.error && e.error.stack ? e.error.stack : e.message) +
+          '</pre>'
+      })
+      window.addEventListener('unhandledrejection', function (e) {
+        document.body.innerHTML =
+          '<pre style="color:#ff6b6b;background:#171614;padding:16px;' +
+          'font:12px monospace;white-space:pre-wrap;height:100%;margin:0">' +
+          'Unhandled rejection:\n\n' + String(e.reason && e.reason.stack || e.reason) +
+          '</pre>'
+      })
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
