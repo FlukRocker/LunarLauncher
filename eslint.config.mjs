@@ -5,7 +5,10 @@ import globals from 'globals';
 
 export default defineConfig(
   {
-    ignores: ['**/dist/**', 'node_modules', 'eslint.config.mjs'],
+    // 'node_modules' alone only matches the root one, so nested installs
+    // (tauri/node_modules) need the glob. `tauri` is excluded outright: it is
+    // a separate TypeScript/Rust project with its own `tsc --noEmit` check.
+    ignores: ['**/dist/**', '**/node_modules/**', 'eslint.config.mjs', 'tauri/**'],
   },
   js.configs.recommended,
   {
