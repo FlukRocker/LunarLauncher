@@ -274,3 +274,210 @@ img.mediaSVG {
     display: flex;
     gap: 8px;
 }
+
+/* =======================================================================
+ * Enlarged media dock + motion
+ *
+ * Layered on top of the ported launcher.css rather than edited into it, so
+ * the port stays a faithful copy of the Electron stylesheet and future
+ * comparisons against 9e7f5b0 stay meaningful.
+ *
+ * Every animation is wrapped by the reduced-motion query at the bottom.
+ * ==================================================================== */
+
+/* --- Media dock: larger, with hover feedback --------------------------- */
+
+.mediaContainer {
+    height: 40px;
+}
+
+.mediaButton {
+    height: 34px;
+}
+
+.mediaDivider {
+    width: 22px;
+    margin: 14px 0;
+    opacity: 0.6;
+}
+
+img.mediaSVG,
+.mediaSVG {
+    height: 26px;
+    width: 30px;
+    transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s ease;
+}
+
+#settingsMediaButton img.mediaSVG,
+#settingsMediaButton .mediaSVG {
+    height: 30px;
+    width: 34px;
+}
+
+.mediaURL:hover img.mediaSVG,
+.mediaButton:hover img.mediaSVG {
+    opacity: 1;
+    transform: scale(1.18);
+}
+
+.mediaURL:active img.mediaSVG,
+.mediaButton:active img.mediaSVG {
+    transform: scale(1.02);
+}
+
+/* The settings gear turns as it grows. */
+#settingsMediaButton:hover img.mediaSVG {
+    transform: scale(1.18) rotate(45deg);
+}
+
+/* --- View transitions --------------------------------------------------
+ * The Electron build cross-faded containers with jQuery. React mounts one
+ * view at a time, so the equivalent is an entry animation on mount.
+ */
+
+@keyframes viewFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+#landingContainer,
+.view {
+    animation: viewFadeIn 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* Landing chrome drifts in slightly after the background, so the view does
+   not arrive all at once. */
+@keyframes riseIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+#upper {
+    animation: riseIn 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) 0.1s both;
+}
+
+#lower {
+    animation: riseIn 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) 0.2s both;
+}
+
+#image_seal {
+    animation: viewFadeIn 0.7s ease 0.15s both;
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+#image_seal:hover {
+    transform: scale(1.06);
+}
+
+/* --- PLAY button ------------------------------------------------------- */
+
+#launch_button {
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1), text-shadow 0.25s ease,
+        color 0.25s ease;
+}
+
+#launch_button:hover:not(:disabled) {
+    transform: scale(1.06);
+}
+
+#launch_button:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+/* --- Avatar ------------------------------------------------------------ */
+
+#avatarContainer {
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1), border-color 0.25s ease;
+}
+
+#avatarContainer:hover {
+    transform: scale(1.05);
+    border-color: #ffffff;
+}
+
+/* --- Launch progress --------------------------------------------------- */
+
+#launch_details {
+    animation: viewFadeIn 0.3s ease both;
+}
+
+#launch_progress {
+    transition: value 0.3s ease;
+}
+
+/* Indeterminate shimmer while a stage reports no measurable progress. */
+@keyframes progressPulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.55;
+    }
+}
+
+#launch_details_text {
+    animation: progressPulse 1.8s ease-in-out infinite;
+}
+
+/* --- Buttons in the non-Electron views --------------------------------- */
+
+.button {
+    transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.button:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.settings__tab {
+    transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+/* --- Respect the OS setting -------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    #landingContainer,
+    .view,
+    #upper,
+    #lower,
+    #image_seal,
+    #launch_details,
+    #launch_details_text {
+        animation: none;
+    }
+
+    img.mediaSVG,
+    .mediaSVG,
+    #launch_button,
+    #avatarContainer,
+    #image_seal,
+    .button {
+        transition: none;
+    }
+
+    .mediaURL:hover img.mediaSVG,
+    .mediaButton:hover img.mediaSVG,
+    #settingsMediaButton:hover img.mediaSVG,
+    #launch_button:hover:not(:disabled),
+    #avatarContainer:hover,
+    #image_seal:hover {
+        transform: none;
+    }
+}
