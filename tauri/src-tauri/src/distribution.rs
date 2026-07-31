@@ -12,9 +12,59 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::paths;
 
-/// Remote distribution index. Mirrors `REMOTE_DISTRO_URL` in distromanager.js.
+/// Remote distribution index, carried over from distromanager.js.
+///
+/// NOTE: this host is stale — it no longer resolves. Override it with
+/// `LUNAR_DISTRO_URL` until the new one is set here.
 pub const REMOTE_DISTRO_URL: &str =
     "https://hermes-mc.net/downloads/lunarpixel/distribution.json";
+
+/// Environment override for the distribution source.
+///
+/// Accepts an `http(s)://` URL, a `file://` URL, or a plain filesystem path,
+/// so development can run entirely against a local index:
+///
+/// ```console
+/// LUNAR_DISTRO_URL=../docs/sample_distribution.json npm run app:dev
+/// ```
+pub const DISTRO_URL_ENV: &str = "LUNAR_DISTRO_URL";
+
+/// Where a distribution index should be read from.
+#[derive(Debug, Clone)]
+pub enum DistroSource {
+    Remote(String),
+    Local(PathBuf),
+}
+
+impl DistroSource {
+    /// Resolve the source, preferring the environment override.
+    ///
+    /// Anything that isn't an `http(s)` URL is treated as a local path, with
+    /// `file://` stripped if present.
+    pub fn resolve() -> Self {
+        match std::env::var(DISTRO_URL_ENV) {
+            Ok(value) if !value.trim().is_empty() => Self::parse(value.trim()),
+            _ => Self::Remote(REMOTE_DISTRO_URL.to_string()),
+        }
+    }
+
+    fn parse(value: &str) -> Self {
+        if value.starts_with("http://") || value.starts_with("https://") {
+            Self::Remote(value.to_string())
+        } else if let Some(rest) = value.strip_prefix("file://") {
+            Self::Local(PathBuf::from(rest))
+        } else {
+            Self::Local(PathBuf::from(value))
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Remote(url) => url.clone(),
+            Self::Local(path) => path.display().to_string(),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Raw spec (helios-distribution-types)
@@ -360,48 +410,59 @@ impl Distribution {
 /// remote is unreachable. Only if both fail does this error — which is the
 /// "Fatal Error: Unable to Load Distribution Index" the user sees.
 pub struct DistributionApi {
-    remote_url: String,
+    source: DistroSource,
     cache_path: PathBuf,
 }
 
 impl DistributionApi {
     pub fn new() -> Self {
+        let source = DistroSource::resolve();
+        tracing::info!(source = %source.describe(), "Distribution source");
         Self {
-            remote_url: REMOTE_DISTRO_URL.to_string(),
+            source,
             cache_path: paths::distribution_path(),
         }
     }
 
     pub async fn get(&self) -> Result<Distribution> {
-        match self.pull_remote().await {
+        match self.pull_source().await {
             Ok(distro) => Ok(distro),
             Err(err) => {
-                tracing::error!(%err, "Pull Remote failed; falling back to local copy.");
+                tracing::error!(%err, "Pull failed; falling back to cached copy.");
                 self.pull_local().ok_or(Error::NoDistribution)
             }
         }
     }
 
-    async fn pull_remote(&self) -> Result<Distribution> {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(15))
-            .build()?;
-        let body = client
-            .get(&self.remote_url)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?;
+    async fn pull_source(&self) -> Result<Distribution> {
+        let body = match &self.source {
+            DistroSource::Remote(url) => {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(15))
+                    .build()?;
+                client
+                    .get(url)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?
+            }
+            DistroSource::Local(path) => tokio::fs::read_to_string(path).await?,
+        };
 
         let distro: Distribution = serde_json::from_str(&body)?;
 
-        // Write through so a later offline start still works.
-        if let Some(parent) = self.cache_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(err) = std::fs::write(&self.cache_path, &body) {
-            tracing::warn!(%err, "Failed to cache distribution index.");
+        // Write through so a later offline start still works. Skip when the
+        // source *is* the cache file, to avoid a pointless self-copy.
+        let is_cache = matches!(&self.source, DistroSource::Local(p) if p == &self.cache_path);
+        if !is_cache {
+            if let Some(parent) = self.cache_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(err) = std::fs::write(&self.cache_path, &body) {
+                tracing::warn!(%err, "Failed to cache distribution index.");
+            }
         }
         Ok(distro)
     }

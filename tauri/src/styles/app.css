@@ -243,3 +243,30 @@ body {
         animation-duration: 3s;
     }
 }
+
+/* --- Launch progress --------------------------------------------------- */
+
+.landing__status {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.landing__detail {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.progress {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+}
+
+.progress__bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+}

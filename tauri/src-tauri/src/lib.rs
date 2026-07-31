@@ -1,8 +1,11 @@
 pub mod commands;
 pub mod config;
 pub mod distribution;
+pub mod dl;
+pub mod java;
 pub mod error;
 pub mod paths;
+pub mod process_builder;
 
 use commands::AppState;
 
@@ -35,6 +38,8 @@ pub fn run() {
             commands::get_memory_info,
             commands::get_config,
             commands::save_settings,
+            commands::scan_java,
+            commands::launch_game,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

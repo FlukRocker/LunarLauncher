@@ -180,3 +180,25 @@ export const api = {
     getConfig: () => invoke<Config>('get_config'),
     saveSettings: (settings: Settings) => invoke<void>('save_settings', { settings })
 }
+
+// --- Java & launch --------------------------------------------------------
+
+export interface JvmDetails {
+    path: string
+    version: { major: number; minor: number; patch: number }
+    versionStr: string
+    vendor: string
+    arch: string
+}
+
+export interface LaunchProgress {
+    stage: 'resolving' | 'validating' | 'downloading' | 'java' | 'launching' | 'done'
+    detail: string
+    percent: number
+}
+
+export const launchApi = {
+    scanJava: (serverId: string) => invoke<JvmDetails[]>('scan_java', { serverId }),
+    /** Validates, downloads and launches. Resolves with the game's PID. */
+    launchGame: () => invoke<number>('launch_game')
+}
