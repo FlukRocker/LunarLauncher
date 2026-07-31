@@ -8,7 +8,11 @@ asar: true
 compression: 'maximum'
 
 files:
-  - '!{dist,.gitignore,.vscode,docs,dev-app-update.yml,.nvmrc,eslint.config.mjs}'
+  # NOTE: `tauri` is excluded deliberately. electron-builder packs from the
+  # working directory, not from git, so without this the Tauri migration's
+  # Rust build output (src-tauri/target, multiple GB) and its own
+  # node_modules would be bundled into the Electron installer.
+  - '!{dist,.gitignore,.vscode,docs,dev-app-update.yml,.nvmrc,eslint.config.mjs,tauri}'
 
 extraResources:
   - 'libraries'
