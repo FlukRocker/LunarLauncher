@@ -17,6 +17,14 @@ import { Welcome } from './views/Welcome'
  */
 export type View = 'loading' | 'welcome' | 'loginOptions' | 'landing' | 'settings' | 'fatal'
 
+// The Electron main process picked a random background per launch and passed
+// it to EJS as `bkid`. Same behaviour, resolved in the renderer now.
+const BACKGROUND_COUNT = 8
+const backgroundUrl = new URL(
+    `./assets/images/backgrounds/${Math.floor(Math.random() * BACKGROUND_COUNT)}.jpg`,
+    import.meta.url
+).href
+
 export function App() {
     const [view, setView] = useState<View>('loading')
     const [boot, setBoot] = useState<Bootstrap | null>(null)
@@ -33,6 +41,10 @@ export function App() {
             setSelected(uuid ? (c.authenticationDatabase[uuid] ?? null) : null)
         })
     }
+
+    useEffect(() => {
+        document.body.style.backgroundImage = `url('${backgroundUrl}')`
+    }, [])
 
     useEffect(() => {
         let cancelled = false
