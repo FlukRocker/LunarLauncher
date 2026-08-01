@@ -1013,3 +1013,49 @@ pub fn cancel_microsoft_login(state: State<'_, AppState>) -> bool {
         None => false,
     }
 }
+
+/// Yggdrasil ("Mojang") sign-in.
+///
+/// Mojang's own auth server is shut down; this targets whatever endpoint
+/// `LUNAR_AUTH_SERVER` names, which is how private servers running
+/// authlib-injector and similar are reached.
+#[tauri::command]
+pub async fn mojang_login(
+    state: State<'_, AppState>,
+    username: String,
+    password: String,
+) -> Result<Account> {
+    let username = username.trim().to_string();
+    if username.is_empty() || password.is_empty() {
+        return Err(Error::Other("Username and password are required.".into()));
+    }
+
+    // Yggdrasil ties a token to a client token; reuse the stored one so
+    // existing sessions are not invalidated on every sign-in.
+    let client_token = state
+        .config
+        .with(|c| c.client_token.clone())?
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let auth = crate::mojang::authenticate(&username, &password, &client_token).await?;
+    let profile = auth
+        .selected_profile
+        .ok_or_else(|| Error::Other("No Minecraft profile on this account.".into()))?;
+
+    let account = Account::Mojang {
+        access_token: auth.access_token,
+        username: username.clone(),
+        uuid: profile.id.clone(),
+        display_name: profile.name,
+    };
+
+    state.config.with_mut(|c| {
+        c.client_token = Some(auth.client_token.clone());
+        c.selected_account = Some(profile.id.clone());
+        c.authentication_database.insert(profile.id.clone(), account.clone());
+    })?;
+    state.config.save()?;
+
+    tracing::info!(user = %account.display_name(), "Mojang/Yggdrasil login complete");
+    Ok(account)
+}

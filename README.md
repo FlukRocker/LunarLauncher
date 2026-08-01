@@ -116,6 +116,18 @@ Third-party forks must register their own Azure application and replace
 `AZURE_CLIENT_ID` in `src-tauri/src/microsoft.rs`. See
 [docs/MicrosoftAuth.md](docs/MicrosoftAuth.md).
 
+### Mojang / Yggdrasil
+
+`authserver.mojang.com` was permanently shut down, so the Mojang login method
+only works against a Yggdrasil-compatible endpoint — which is what servers
+running authlib-injector, ely.by and similar provide. Point it at yours:
+
+```console
+LUNAR_AUTH_SERVER=https://auth.example.com/authserver npm run app:dev
+```
+
+Left unset it targets Mojang's old host and fails with a message saying so.
+
 ## Remaining work
 
 1. **Mod loader support** — Forge/Fabric manifest resolution, the Forge

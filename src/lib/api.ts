@@ -229,6 +229,9 @@ export const authApi = {
     microsoftLogin: () => invoke<Account>('microsoft_login'),
     /** Aborts a pending browser sign-in. False if nothing was waiting. */
     cancelMicrosoftLogin: () => invoke<boolean>('cancel_microsoft_login'),
+    /** Yggdrasil sign-in against LUNAR_AUTH_SERVER. */
+    mojangLogin: (username: string, password: string) =>
+        invoke<Account>('mojang_login', { username, password }),
     microsoftLogout: (uuid: string) => invoke<boolean>('microsoft_logout', { uuid }),
     /** Refreshes the selected account if expired. False means re-login needed. */
     validateSelected: () => invoke<boolean>('validate_selected_account')

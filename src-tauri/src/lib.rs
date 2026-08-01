@@ -7,6 +7,7 @@ pub mod java;
 pub mod error;
 pub mod microsoft;
 pub mod mods;
+pub mod mojang;
 pub mod paths;
 pub mod server_status;
 pub mod process_builder;
@@ -49,6 +50,7 @@ pub fn run() {
             commands::microsoft_login,
             commands::microsoft_login_browser,
             commands::cancel_microsoft_login,
+            commands::mojang_login,
             commands::validate_selected_account,
             commands::microsoft_logout,
             commands::get_java_config,

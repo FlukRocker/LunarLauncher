@@ -587,3 +587,16 @@ img.mediaSVG,
     height: 19px;
     width: 22px;
 }
+
+/* Login buttons carry a provider icon, as loginOptions.ejs did. */
+.loginOptionButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.loginOptionButton svg {
+    flex: none;
+}
