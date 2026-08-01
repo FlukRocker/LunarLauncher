@@ -569,3 +569,21 @@ img.mediaSVG,
     font-size: 12px;
     flex: none;
 }
+
+/*
+ * Optical size normalisation.
+ *
+ * These icons come from different sources and pad their glyphs differently
+ * inside the canvas: link/youtube/discord/settings fill roughly 74% of a
+ * 141x137 viewBox, while instagram (5040x5040) and x (300x271) run edge to
+ * edge. Given one CSS box, the edge-to-edge pair therefore renders visibly
+ * larger. Scaling them to ~74% matches the optical weight of the rest.
+ *
+ * Done with width/height rather than transform so the hover scale above
+ * still composes.
+ */
+#xURL img.mediaSVG,
+#instagramURL img.mediaSVG {
+    height: 19px;
+    width: 22px;
+}
