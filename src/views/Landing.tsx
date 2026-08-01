@@ -5,6 +5,7 @@ import {
     isApiError,
     launchApi,
     type Account,
+    gameApi,
     newsApi,
     statusApi,
     type LaunchProgress,
@@ -45,6 +46,7 @@ export function Landing({
     const [news, setNews] = useState<Article[]>([])
     const [article, setArticle] = useState(0)
     const [newsOpen, setNewsOpen] = useState(false)
+    const [playing, setPlaying] = useState(false)
 
     useEffect(() => {
         api.getSelectedServer()
@@ -77,6 +79,21 @@ export function Landing({
         )
         return () => {
             void unlisten.then((f) => f())
+        }
+    }, [])
+
+    // Track the game process. The state is also read on mount, so returning to
+    // this view while the game is already running still shows it as playing.
+    useEffect(() => {
+        void gameApi.isRunning().then(setPlaying).catch(() => {})
+        const started = listen('game://started', () => setPlaying(true))
+        const exited = listen('game://exited', () => {
+            setPlaying(false)
+            setProgress(null)
+        })
+        return () => {
+            void started.then((f) => f())
+            void exited.then((f) => f())
         }
     }, [])
 
@@ -228,10 +245,12 @@ export function Landing({
                         <div id="launch_content" style={launching ? { display: 'none' } : undefined}>
                             <button
                                 id="launch_button"
+                                className={playing ? 'launch_button--playing' : undefined}
                                 onClick={() => void play()}
-                                disabled={!server || !account}
+                                disabled={!server || !account || playing}
+                                title={playing ? 'The game is already running' : undefined}
                             >
-                                PLAY
+                                {playing ? 'PLAYING' : 'PLAY'}
                             </button>
                             <div className="bot_divider" />
                             <button id="server_selection_button" className="bot_label">

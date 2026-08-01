@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GameLog } from './GameLog'
 import { Mods } from './Mods'
 import {
     api,
@@ -24,7 +25,7 @@ const NAV: { tab: Tab; label: string }[] = [
 
 const HEADERS: Record<Tab, [string, string]> = {
     account: ['Account Settings', 'Add new accounts or manage existing ones.'],
-    minecraft: ['Minecraft Settings', 'Options related to game launch.'],
+    minecraft: ['Minecraft Settings', 'Options related to game launch, and the game log.'],
     mods: ['Mod Settings', 'Enable, disable, and manage mods.'],
     java: ['Java Settings', 'Manage the Java configuration (advanced).'],
     launcher: ['Launcher Settings', 'Options related to the launcher itself.']
@@ -271,6 +272,14 @@ export function Settings({
                                         />
                                     </div>
                                 </div>
+
+                                <div className="settingsTabHeader">
+                                    <span className="settingsTabHeaderText">Game Log</span>
+                                    <span className="settingsTabHeaderDesc">
+                                        Output from the running game.
+                                    </span>
+                                </div>
+                                <GameLog />
                             </>
                         )}
 

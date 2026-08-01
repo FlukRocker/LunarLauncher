@@ -70,6 +70,9 @@ pub fn run() {
             commands::set_shaderpack,
             commands::get_server_status,
             commands::get_news,
+            commands::is_game_running,
+            commands::get_game_log,
+            commands::clear_game_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

@@ -323,3 +323,11 @@ export interface Article {
 export const newsApi = {
     getNews: () => invoke<Article[]>('get_news')
 }
+
+// --- Game process ---------------------------------------------------------
+
+export const gameApi = {
+    isRunning: () => invoke<boolean>('is_game_running'),
+    getLog: () => invoke<string[]>('get_game_log'),
+    clearLog: () => invoke<void>('clear_game_log')
+}

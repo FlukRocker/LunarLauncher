@@ -19,6 +19,11 @@ pub struct AppState {
     pub distribution: std::sync::Mutex<Option<Distribution>>,
     /// Set while a browser sign-in is pending, so it can be cancelled.
     pub login_cancel: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    /// True while a game process is alive.
+    pub game_running: std::sync::atomic::AtomicBool,
+    /// Ring buffer of the game's output, so the log tab can show history
+    /// rather than only lines that arrive after it is opened.
+    pub game_log: std::sync::Mutex<std::collections::VecDeque<String>>,
 }
 
 impl AppState {
@@ -28,6 +33,8 @@ impl AppState {
             distro: DistributionApi::new(),
             distribution: std::sync::Mutex::new(None),
             login_cancel: std::sync::Mutex::new(None),
+            game_running: std::sync::atomic::AtomicBool::new(false),
+            game_log: std::sync::Mutex::new(std::collections::VecDeque::new()),
         }
     }
 }
@@ -434,13 +441,53 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
     emit_progress(&app, "done", "Game launched", 100.0);
     tracing::info!(pid, server = %server_id, "Game process started");
 
-    // Detach: the game outlives this call.
+    state.game_running.store(true, std::sync::atomic::Ordering::SeqCst);
+    state.game_log.lock().unwrap().clear();
+    let _ = tauri::Emitter::emit(&app, "game://started", pid);
+
+    // Pump the game's output into the ring buffer and out as events, so the
+    // log tab can show it live. Without this the pipes fill and the game
+    // eventually blocks on its own stdout.
     tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, BufReader};
         let mut child = child;
-        match child.wait().await {
-            Ok(status) => tracing::info!(?status, "Game process exited"),
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        // Generic over the reader: stdout and stderr are distinct types, so a
+        // closure would bind to whichever was passed first.
+        async fn pump<R>(reader: Option<R>, app: tauri::AppHandle)
+        where
+            R: tokio::io::AsyncRead + Unpin,
+        {
+            let Some(r) = reader else { return };
+            let mut lines = BufReader::new(r).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                if let Some(state) = tauri::Manager::try_state::<AppState>(&app) {
+                    let mut log = state.game_log.lock().unwrap();
+                    if log.len() >= GAME_LOG_CAPACITY {
+                        log.pop_front();
+                    }
+                    log.push_back(line.clone());
+                }
+                let _ = tauri::Emitter::emit(&app, "game://log", line);
+            }
+        }
+
+        tokio::join!(pump(stdout, app.clone()), pump(stderr, app.clone()));
+
+        let status = child.wait().await;
+        match &status {
+            Ok(s) => tracing::info!(?s, "Game process exited"),
             Err(err) => tracing::error!(%err, "Failed waiting on game process"),
         }
+        if let Some(state) = tauri::Manager::try_state::<AppState>(&app) {
+            state
+                .game_running
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
+        let _ = tauri::Emitter::emit(&app, "game://exited", code);
     });
 
     Ok(pid)
@@ -1071,4 +1118,24 @@ pub async fn get_news(state: State<'_, AppState>) -> Result<Vec<crate::news::Art
         guard.as_ref().and_then(|d| d.rss.clone()).unwrap_or_default()
     };
     crate::news::load(&rss).await
+}
+
+/// How many lines of game output to retain.
+const GAME_LOG_CAPACITY: usize = 2000;
+
+/// Is a game process alive right now?
+#[tauri::command]
+pub fn is_game_running(state: State<'_, AppState>) -> bool {
+    state.game_running.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// The retained game output, oldest first.
+#[tauri::command]
+pub fn get_game_log(state: State<'_, AppState>) -> Vec<String> {
+    state.game_log.lock().unwrap().iter().cloned().collect()
+}
+
+#[tauri::command]
+pub fn clear_game_log(state: State<'_, AppState>) {
+    state.game_log.lock().unwrap().clear();
 }
