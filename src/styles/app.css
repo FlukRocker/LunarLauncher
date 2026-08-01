@@ -385,3 +385,74 @@ img.mediaSVG {
 .settingsTab .panel__error {
     width: 75%;
 }
+
+/*
+ * Settings nav: larger, with a clear active state.
+ *
+ * launcher.css sets these to plain grey with no visual distinction for the
+ * selected tab, which makes it hard to tell where you are.
+ */
+.settingsNavItem {
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 17px;
+    padding: 10px 20px;
+    margin: 2px 0;
+    letter-spacing: 0.3px;
+    border-left: 3px solid transparent;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.settingsNavItem:hover {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.settingsNavItem[selected] {
+    color: #ffffff;
+    border-left-color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+#settingsNavDone {
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 17px;
+    padding: 10px 20px;
+    transition: color 0.18s ease;
+}
+
+#settingsNavDone:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+#settingsNavHeaderText {
+    font-size: 26px;
+}
+
+/*
+ * Media dock: force a single uniform box for every icon.
+ *
+ * The icons come from different sources with different glyph padding, so
+ * per-icon tweaks kept drifting. Pinning one box for all of them and letting
+ * object-fit letterbox inside it makes the row uniform regardless of what any
+ * individual file's canvas looks like.
+ */
+img.mediaSVG {
+    height: 24px !important;
+    width: 24px !important;
+    object-fit: contain;
+}
+
+/* The two edge-to-edge glyphs still need trimming to match the padded ones. */
+#xURL img.mediaSVG,
+#instagramURL img.mediaSVG {
+    height: 18px !important;
+    width: 18px !important;
+}
+
+#settingsMediaButton img.mediaSVG {
+    height: 26px !important;
+    width: 26px !important;
+}
+
+.mediaContainer {
+    height: 38px;
+}
