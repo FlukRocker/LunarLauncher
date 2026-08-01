@@ -34,7 +34,16 @@ export function App() {
     const [serverId, setServerId] = useState<string | null>(null)
 
     const refreshAccounts = () => {
-        void api.getAccounts().then(setAccounts)
+        void api.getAccounts().then((list) => {
+            setAccounts(list)
+            // Removing the last account leaves nothing to launch with, so send
+            // the user back to sign in rather than stranding them on a landing
+            // view whose PLAY button can never work.
+            if (list.length === 0) {
+                setSelected(null)
+                setView('loginOptions')
+            }
+        })
         void api.getConfig().then((c) => {
             setServerId(c.selectedServer)
             const uuid = c.selectedAccount
@@ -104,7 +113,15 @@ export function App() {
                         }}
                     />
                 )}
-                {view === 'landing' && boot && (
+                {view === 'landing' && boot && selected === null && (
+                    <LoginOptions
+                        onLoggedIn={() => {
+                            refreshAccounts()
+                            setView('landing')
+                        }}
+                    />
+                )}
+                {view === 'landing' && boot && selected !== null && (
                     <Landing
                         account={selected}
                         onOpenSettings={() => setView('settings')}
