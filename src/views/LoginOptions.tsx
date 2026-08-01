@@ -252,7 +252,6 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                     <MicrosoftIcon />
                     <span>Log in with Microsoft</span>
                 </button>
-                <p className="panel__hint">Opens in your default browser.</p>
                 {error && <p className="panel__error">{error}</p>}
                 <button
                     className="button loginOptionButton"
