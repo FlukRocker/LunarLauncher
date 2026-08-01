@@ -92,16 +92,15 @@ export function Landing({
                             <span id="user_text">
                                 {account ? account.displayName : 'No Account'}
                             </span>
-                            <div id="avatarContainer">
-                                <button
-                                    id="avatarOverlay"
-                                    onClick={onOpenSettings}
-                                    style={
-                                        avatarUrl
-                                            ? { backgroundImage: `url('${avatarUrl}')` }
-                                            : undefined
-                                    }
-                                >
+                            <div
+                                id="avatarContainer"
+                                style={
+                                    avatarUrl
+                                        ? { backgroundImage: `url('${avatarUrl}')` }
+                                        : undefined
+                                }
+                            >
+                                <button id="avatarOverlay" onClick={onOpenSettings}>
                                     Edit
                                 </button>
                             </div>
