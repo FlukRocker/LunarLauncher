@@ -464,7 +464,7 @@ img.mediaSVG {
 .newsPane {
     position: absolute;
     inset: 0;
-    background: var(--scrim);
+    background: var(--reading-surface);
     padding: 40px 12% 60px;
     overflow-y: auto;
     z-index: 20;
@@ -521,4 +521,17 @@ img.mediaSVG {
     margin-top: 24px;
     color: #7289da;
     font-size: 13px;
+}
+
+/*
+ * Title bar.
+ *
+ * launcher.css gives #frameBar only a background-color transition, no value —
+ * the Electron build set it from JS once the UI was ready
+ * (uibinder.js: frameBar.style.backgroundColor = 'rgba(0, 0, 0, 0.5)').
+ * Porting the stylesheet alone therefore left it transparent and out of step
+ * with every other surface. That value is --scrim, so it is applied here.
+ */
+#frameBar {
+    background-color: var(--scrim);
 }
