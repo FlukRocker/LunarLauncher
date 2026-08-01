@@ -283,3 +283,18 @@ export const modsApi = {
     setShaderpack: (serverId: string, pack: string) =>
         invoke<void>('set_shaderpack', { serverId, pack })
 }
+
+// --- Server status --------------------------------------------------------
+
+export interface ServerStatus {
+    online: boolean
+    playersOnline: number | null
+    playersMax: number | null
+    version: string | null
+}
+
+/** Live player count. Resolves with online:false rather than throwing. */
+export const statusApi = {
+    getServerStatus: (serverId: string) =>
+        invoke<ServerStatus>('get_server_status', { serverId })
+}

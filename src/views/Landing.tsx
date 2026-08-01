@@ -5,8 +5,10 @@ import {
     isApiError,
     launchApi,
     type Account,
+    statusApi,
     type LaunchProgress,
-    type Server
+    type Server,
+    type ServerStatus
 } from '../lib/api'
 
 import logo from '../assets/images/LunarLogo.png'
@@ -37,10 +39,15 @@ export function Landing({
     const [error, setError] = useState<string | null>(null)
     const [progress, setProgress] = useState<LaunchProgress | null>(null)
     const [launching, setLaunching] = useState(false)
+    const [status, setStatus] = useState<ServerStatus | null>(null)
 
     useEffect(() => {
         api.getSelectedServer()
-            .then(setServer)
+            .then((s) => {
+                setServer(s)
+                // Ping for the live player count, as the Electron build did.
+                if (s) void statusApi.getServerStatus(s.id).then(setStatus).catch(() => {})
+            })
             .catch((err: unknown) => setError(isApiError(err) ? err.message : String(err)))
     }, [])
 
@@ -145,16 +152,32 @@ export function Landing({
                         <div id="content">
                             <div id="server_status_wrapper">
                                 <span className="bot_label" id="landingPlayerLabel">
-                                    SERVER
+                                    {status && !status.online ? 'SERVER' : 'PLAYERS'}
                                 </span>
                                 <span id="player_count">
-                                    {server ? server.minecraftVersion : '• • •'}
+                                    {status === null
+                                        ? '• • •'
+                                        : status.online
+                                          ? `${status.playersOnline ?? 0}/${status.playersMax ?? 0}`
+                                          : 'OFFLINE'}
                                 </span>
                             </div>
                             <div className="bot_divider" />
                             <div id="mojangStatusWrapper">
-                                <span className="bot_label">MOJANG STATUS</span>
-                                <span id="mojang_status_icon">&#8226;</span>
+                                <span className="bot_label">SERVER STATUS</span>
+                                <span
+                                    id="mojang_status_icon"
+                                    style={{
+                                        color:
+                                            status === null
+                                                ? '#a5a5a5'
+                                                : status.online
+                                                  ? '#a5c325'
+                                                  : '#c32625'
+                                    }}
+                                >
+                                    &#8226;
+                                </span>
                             </div>
                         </div>
                     </div>

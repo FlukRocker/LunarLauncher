@@ -8,6 +8,7 @@ pub mod error;
 pub mod microsoft;
 pub mod mods;
 pub mod paths;
+pub mod server_status;
 pub mod process_builder;
 
 use commands::AppState;
@@ -62,6 +63,7 @@ pub fn run() {
             commands::open_mods_folder,
             commands::get_shaderpacks,
             commands::set_shaderpack,
+            commands::get_server_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

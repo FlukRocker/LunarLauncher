@@ -907,3 +907,23 @@ pub fn set_shaderpack(
 ) -> Result<()> {
     crate::mods::set_enabled_shaderpack(&instance_dir_for(&state, &server_id)?, &pack)
 }
+
+/// Ping the selected server for its live player count.
+///
+/// Never fails on an unreachable host — an offline server is a normal state
+/// the landing view has to render, not an error.
+#[tauri::command]
+pub async fn get_server_status(
+    state: State<'_, AppState>,
+    server_id: String,
+) -> Result<crate::server_status::ServerStatus> {
+    let address = {
+        let guard = state.distribution.lock().unwrap();
+        let distro = guard.as_ref().ok_or(Error::NoDistribution)?;
+        distro
+            .server_by_id(&server_id)
+            .ok_or_else(|| Error::UnknownServer(server_id.clone()))?
+            .parse_address()?
+    };
+    Ok(crate::server_status::ping(&address.hostname, address.port).await)
+}
