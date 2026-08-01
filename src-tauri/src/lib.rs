@@ -11,18 +11,46 @@ pub mod mojang;
 pub mod news;
 pub mod paths;
 pub mod server_status;
+pub mod telemetry;
 pub mod process_builder;
 
 use commands::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
-        )
-        .init();
+    // Telemetry settings live in config.json, which the app has not loaded
+    // yet, so read just that file here to decide whether to install the OTLP
+    // layer. Any failure falls back to plain logging rather than blocking
+    // startup — diagnostics must never stop the launcher running.
+    let telemetry = std::fs::read_to_string(paths::config_path())
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| v.get("settings")?.get("telemetry").cloned())
+        .and_then(|v| serde_json::from_value::<telemetry::TelemetryConfig>(v).ok())
+        .unwrap_or_default();
+
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info".into());
+
+    match telemetry::build_layer(&telemetry) {
+        Ok(Some(otel)) => {
+            use tracing_subscriber::layer::SubscriberExt;
+            use tracing_subscriber::util::SubscriberInitExt;
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(tracing_subscriber::fmt::layer())
+                .with(otel)
+                .init();
+            tracing::info!(endpoint = %telemetry.endpoint, "OpenTelemetry enabled");
+        }
+        Ok(None) => {
+            tracing_subscriber::fmt().with_env_filter(filter).init();
+        }
+        Err(err) => {
+            tracing_subscriber::fmt().with_env_filter(filter).init();
+            tracing::error!(%err, "Telemetry setup failed; continuing without it");
+        }
+    }
 
     tracing::info!("Lunar Launcher starting");
 
@@ -73,6 +101,8 @@ pub fn run() {
             commands::is_game_running,
             commands::get_game_log,
             commands::clear_game_log,
+            commands::get_telemetry,
+            commands::save_telemetry,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

@@ -30,6 +30,11 @@ futures = "0.3"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+opentelemetry = "0.27"
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", default-features = false, features = ["trace", "http-proto", "reqwest-client"] }
+opentelemetry-semantic-conventions = "0.27"
+tracing-opentelemetry = "0.28"
 
 sysinfo = "0.32"
 dirs = "5"

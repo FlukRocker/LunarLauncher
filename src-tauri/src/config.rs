@@ -89,6 +89,9 @@ pub struct Settings {
     pub game: GameSettings,
     #[serde(default)]
     pub launcher: LauncherSettings,
+    /// Absent from an Electron-written config, so it defaults to disabled.
+    #[serde(default)]
+    pub telemetry: crate::telemetry::TelemetryConfig,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

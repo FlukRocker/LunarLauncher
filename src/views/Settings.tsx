@@ -9,8 +9,10 @@ import {
     type Account,
     type JavaSettings,
     type JvmDetails,
+    telemetryApi,
     type MemoryInfo,
-    type Settings as AppSettings
+    type Settings as AppSettings,
+    type TelemetryConfig
 } from '../lib/api'
 
 type Tab = 'account' | 'minecraft' | 'mods' | 'java' | 'launcher'
@@ -53,6 +55,7 @@ export function Settings({
     const [java, setJava] = useState<JavaSettings | null>(null)
     const [memory, setMemory] = useState<MemoryInfo | null>(null)
     const [jvms, setJvms] = useState<JvmDetails[] | null>(null)
+    const [otel, setOtel] = useState<TelemetryConfig | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [saved, setSaved] = useState(false)
 
@@ -62,6 +65,7 @@ export function Settings({
         api.getConfig().then((c) => setSettings(c.settings)).catch(fail)
         api.getMemoryInfo(serverId ?? undefined).then(setMemory).catch(fail)
         if (serverId) settingsApi.getJavaConfig(serverId).then(setJava).catch(fail)
+        telemetryApi.get().then(setOtel).catch(fail)
     }, [serverId])
 
     const save = async () => {
@@ -69,6 +73,7 @@ export function Settings({
         try {
             if (settings) await api.saveSettings(settings)
             if (serverId && java) await settingsApi.saveJavaConfig(serverId, java)
+            if (otel) await telemetryApi.save(otel)
             setSaved(true)
             setTimeout(() => setSaved(false), 1500)
         } catch (err) {
@@ -413,14 +418,108 @@ export function Settings({
                             ))}
 
                         {tab === 'launcher' && settings && (
-                            <div className="settingsFieldContainer">
-                                <div className="settingsFieldLeft">
-                                    <span className="settingsFieldTitle">Data Directory</span>
-                                    <span className="settingsFieldDesc">
-                                        {settings.launcher.dataDirectory}
-                                    </span>
+                            <>
+                                <div className="settingsFieldContainer">
+                                    <div className="settingsFieldLeft">
+                                        <span className="settingsFieldTitle">Data Directory</span>
+                                        <span className="settingsFieldDesc">
+                                            {settings.launcher.dataDirectory}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
+
+                                {otel && (
+                                    <>
+                                        <div className="settingsTabHeader">
+                                            <span className="settingsTabHeaderText">
+                                                Telemetry
+                                            </span>
+                                            <span className="settingsTabHeaderDesc">
+                                                Off by default. When enabled, the launcher sends
+                                                OpenTelemetry traces — launch steps, download and
+                                                validation timings, and errors — to a collector you
+                                                run. Nothing is sent anywhere else, and nothing is
+                                                sent at all without an endpoint.
+                                            </span>
+                                        </div>
+
+                                        <div className="settingsFieldContainer">
+                                            <div className="settingsFieldLeft">
+                                                <span className="settingsFieldTitle">
+                                                    Enable telemetry
+                                                </span>
+                                                <span className="settingsFieldDesc">
+                                                    Takes effect after restarting the launcher.
+                                                </span>
+                                            </div>
+                                            <div className="settingsFieldRight">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={otel.enabled}
+                                                    onChange={(e) =>
+                                                        setOtel({
+                                                            ...otel,
+                                                            enabled: e.target.checked
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="settingsFieldContainer">
+                                            <div className="settingsFieldLeft">
+                                                <span className="settingsFieldTitle">
+                                                    OTLP endpoint
+                                                </span>
+                                                <span className="settingsFieldDesc">
+                                                    Your collector&apos;s HTTP address, e.g.
+                                                    http://localhost:4318
+                                                </span>
+                                            </div>
+                                            <div className="settingsFieldRight">
+                                                <input
+                                                    className="settingsFieldValue"
+                                                    placeholder="http://localhost:4318"
+                                                    value={otel.endpoint}
+                                                    onChange={(e) =>
+                                                        setOtel({
+                                                            ...otel,
+                                                            endpoint: e.target.value
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="settingsFieldContainer">
+                                            <div className="settingsFieldLeft">
+                                                <span className="settingsFieldTitle">
+                                                    Java agent (optional)
+                                                </span>
+                                                <span className="settingsFieldDesc">
+                                                    Path to opentelemetry-javaagent.jar, to trace
+                                                    the game as well. Skipped if the file is
+                                                    missing.
+                                                </span>
+                                            </div>
+                                            <div className="settingsFieldRight">
+                                                <input
+                                                    className="settingsFieldValue"
+                                                    placeholder="/path/to/opentelemetry-javaagent.jar"
+                                                    value={otel.javaAgentPath ?? ''}
+                                                    onChange={(e) =>
+                                                        setOtel({
+                                                            ...otel,
+                                                            javaAgentPath:
+                                                                e.target.value || null
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </>
                         )}
 
                         <div className="settingsFieldContainer">

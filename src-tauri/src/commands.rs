@@ -372,8 +372,17 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
             c.settings.game.fullscreen,
         )
     })?;
-    let java_config = java_config
+    let mut java_config = java_config
         .ok_or_else(|| Error::Other(format!("No java config for {server_id}.")))?;
+
+    // Attach the OpenTelemetry Java agent, if the user configured one. Appended
+    // to the user's own JVM options so their flags still win.
+    let telemetry = state.config.with(|c| c.settings.telemetry.clone())?;
+    let agent_args = crate::telemetry::java_agent_args(&telemetry, &server_id);
+    if !agent_args.is_empty() {
+        tracing::info!("Attaching the OpenTelemetry Java agent to the game");
+        java_config.jvm_options.extend(agent_args);
+    }
 
     let common_dir = data_dir.join("common");
     let game_dir = data_dir.join("instances").join(&server_id);
@@ -1138,4 +1147,22 @@ pub fn get_game_log(state: State<'_, AppState>) -> Vec<String> {
 #[tauri::command]
 pub fn clear_game_log(state: State<'_, AppState>) {
     state.game_log.lock().unwrap().clear();
+}
+
+/// Current telemetry settings.
+#[tauri::command]
+pub fn get_telemetry(state: State<'_, AppState>) -> Result<crate::telemetry::TelemetryConfig> {
+    state.config.with(|c| c.settings.telemetry.clone())
+}
+
+/// Update telemetry settings. Takes effect for the game immediately; the
+/// launcher's own exporter is installed at startup, so that part needs a
+/// restart, which the UI says.
+#[tauri::command]
+pub fn save_telemetry(
+    state: State<'_, AppState>,
+    telemetry: crate::telemetry::TelemetryConfig,
+) -> Result<()> {
+    state.config.with_mut(|c| c.settings.telemetry = telemetry)?;
+    state.config.save()
 }

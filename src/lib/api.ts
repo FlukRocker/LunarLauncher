@@ -331,3 +331,18 @@ export const gameApi = {
     getLog: () => invoke<string[]>('get_game_log'),
     clearLog: () => invoke<void>('clear_game_log')
 }
+
+// --- Telemetry ------------------------------------------------------------
+
+export interface TelemetryConfig {
+    enabled: boolean
+    /** OTLP/HTTP collector, e.g. http://localhost:4318. Empty means inactive. */
+    endpoint: string
+    /** Optional OpenTelemetry Java agent jar, to instrument the game too. */
+    javaAgentPath: string | null
+}
+
+export const telemetryApi = {
+    get: () => invoke<TelemetryConfig>('get_telemetry'),
+    save: (telemetry: TelemetryConfig) => invoke<void>('save_telemetry', { telemetry })
+}
