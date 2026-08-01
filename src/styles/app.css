@@ -295,3 +295,93 @@ img.mediaSVG {
     overflow-y: auto;
 }
 
+
+/*
+ * Settings: fill the gaps launcher.css leaves.
+ *
+ * It styles the nav column, the container, .settingsFieldContainer/Left and
+ * the tab header font — but defines nothing for #settingsContent,
+ * .settingsFieldRight or form controls, because the Electron view nested
+ * different markup inside those. Removing this supplement leaves the content
+ * pane with no padding and the header spans running together inline.
+ *
+ * Nothing here restates a value launcher.css already sets; field text colours
+ * in particular are left to it (.settingsFieldDesc is .95 there).
+ */
+
+#settingsContainerRight {
+    overflow-y: auto;
+}
+
+#settingsContent {
+    height: 100%;
+    padding: 4% 0 4% 6%;
+    box-sizing: border-box;
+}
+
+/* The header's two spans must stack; launcher.css only sets their fonts. */
+.settingsTabHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 75%;
+    padding-bottom: 18px;
+}
+
+.settingsFieldRight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+/* Form controls, which launcher.css does not cover at all. */
+.settingsFieldValue {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #fff;
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 13px;
+    padding: 6px 9px;
+    width: 150px;
+    box-sizing: border-box;
+}
+
+.settingsFieldValue:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.settingsFieldRight input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: #fff;
+}
+
+.settingsFileSelButton {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: #fff;
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 12px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.settingsFileSelButton:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #fff;
+}
+
+.settingsCurrentAccounts {
+    width: 100%;
+}
+
+/* Mod manager lives inside a settings tab, so give it the same measure. */
+.settingsTab .mods__heading,
+.settingsTab .mod-list,
+.settingsTab .panel__hint,
+.settingsTab .panel__error {
+    width: 75%;
+}
