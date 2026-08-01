@@ -600,3 +600,40 @@ img.mediaSVG,
 .loginOptionButton svg {
     flex: none;
 }
+
+/*
+ * Settings legibility.
+ *
+ * launcher.css lays the settings panel over the game background. The Electron
+ * build sat it on an opaque dark surface; reproduce that here so body text is
+ * readable rather than competing with the artwork behind it.
+ */
+#settingsContainer {
+    background: rgba(11, 10, 9, 0.92);
+    height: 100%;
+    display: flex;
+}
+
+#settingsContainerRight {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+.settingsFieldTitle {
+    color: #ffffff;
+}
+
+.settingsFieldDesc,
+.settingsTabHeaderDesc {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.settingsNavItem {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.settingsNavItem[selected],
+.settingsNavItem:hover {
+    color: #ffffff;
+}

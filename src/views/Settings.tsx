@@ -12,13 +12,29 @@ import {
     type Settings as AppSettings
 } from '../lib/api'
 
-type Tab = 'game' | 'java' | 'mods' | 'accounts'
+type Tab = 'account' | 'minecraft' | 'mods' | 'java' | 'launcher'
+
+const NAV: { tab: Tab; label: string }[] = [
+    { tab: 'account', label: 'Account' },
+    { tab: 'minecraft', label: 'Minecraft' },
+    { tab: 'mods', label: 'Mods' },
+    { tab: 'java', label: 'Java' },
+    { tab: 'launcher', label: 'Launcher' }
+]
+
+const HEADERS: Record<Tab, [string, string]> = {
+    account: ['Account Settings', 'Add new accounts or manage existing ones.'],
+    minecraft: ['Minecraft Settings', 'Options related to game launch.'],
+    mods: ['Mod Settings', 'Enable, disable, and manage mods.'],
+    java: ['Java Settings', 'Manage the Java configuration (advanced).'],
+    launcher: ['Launcher Settings', 'Options related to the launcher itself.']
+}
 
 /**
- * Settings, replacing the Electron settings.ejs/settings.js pair.
- *
- * Edits are held locally and committed on Save, matching how the Electron
- * view batched changes before calling ConfigManager.save().
+ * Settings, using the Electron `settings.ejs` markup — same ids and class
+ * names — so the ported launcher.css styles it unchanged. That is also what
+ * fixes legibility: launcher.css gives the panel its own dark backing, rather
+ * than letting the game background show through at full strength.
  */
 export function Settings({
     serverId,
@@ -31,7 +47,7 @@ export function Settings({
     onClose: () => void
     onAccountsChanged: () => void
 }) {
-    const [tab, setTab] = useState<Tab>('game')
+    const [tab, setTab] = useState<Tab>('account')
     const [settings, setSettings] = useState<AppSettings | null>(null)
     const [java, setJava] = useState<JavaSettings | null>(null)
     const [memory, setMemory] = useState<MemoryInfo | null>(null)
@@ -59,6 +75,11 @@ export function Settings({
         }
     }
 
+    const done = async () => {
+        await save()
+        onClose()
+    }
+
     const scan = async () => {
         if (!serverId) return
         setError(null)
@@ -69,217 +90,337 @@ export function Settings({
         }
     }
 
+    const [headerText, headerDesc] = HEADERS[tab]
+
     return (
-        <div className="view settings">
-            <nav className="settings__tabs">
-                {(['game', 'java', 'mods', 'accounts'] as Tab[]).map((t) => (
-                    <button
-                        key={t}
-                        className={`settings__tab${tab === t ? ' settings__tab--active' : ''}`}
-                        onClick={() => setTab(t)}
-                    >
-                        {t === 'game'
-                            ? 'Game'
-                            : t === 'java'
-                              ? 'Java'
-                              : t === 'mods'
-                                ? 'Mods'
-                                : 'Accounts'}
-                    </button>
-                ))}
-                <div className="settings__spacer" />
-                <button className="button" onClick={onClose}>
-                    Done
-                </button>
-            </nav>
-
-            <div className="settings__body">
-                {error && <p className="panel__error">{error}</p>}
-
-                {tab === 'game' && settings && (
-                    <>
-                        <label className="field">
-                            <span>Width</span>
-                            <input
-                                className="input input--inline"
-                                type="number"
-                                value={settings.game.resWidth}
-                                onChange={(e) =>
-                                    setSettings({
-                                        ...settings,
-                                        game: { ...settings.game, resWidth: Number(e.target.value) }
-                                    })
-                                }
-                            />
-                        </label>
-                        <label className="field">
-                            <span>Height</span>
-                            <input
-                                className="input input--inline"
-                                type="number"
-                                value={settings.game.resHeight}
-                                onChange={(e) =>
-                                    setSettings({
-                                        ...settings,
-                                        game: { ...settings.game, resHeight: Number(e.target.value) }
-                                    })
-                                }
-                            />
-                        </label>
-                        <label className="field field--check">
-                            <input
-                                type="checkbox"
-                                checked={settings.game.fullscreen}
-                                onChange={(e) =>
-                                    setSettings({
-                                        ...settings,
-                                        game: { ...settings.game, fullscreen: e.target.checked }
-                                    })
-                                }
-                            />
-                            <span>Fullscreen</span>
-                        </label>
-                        <label className="field field--check">
-                            <input
-                                type="checkbox"
-                                checked={settings.game.autoConnect}
-                                onChange={(e) =>
-                                    setSettings({
-                                        ...settings,
-                                        game: { ...settings.game, autoConnect: e.target.checked }
-                                    })
-                                }
-                            />
-                            <span>Auto-connect to the server on launch</span>
-                        </label>
-                        <p className="panel__hint">
-                            Data directory: {settings.launcher.dataDirectory}
-                        </p>
-                    </>
-                )}
-
-                {tab === 'java' && (
-                    java ? (
-                        <>
-                            <label className="field">
-                                <span>Minimum RAM</span>
-                                <input
-                                    className="input input--inline"
-                                    value={java.minRam}
-                                    onChange={(e) => setJava({ ...java, minRam: e.target.value })}
-                                />
-                            </label>
-                            <label className="field">
-                                <span>Maximum RAM</span>
-                                <input
-                                    className="input input--inline"
-                                    value={java.maxRam}
-                                    onChange={(e) => setJava({ ...java, maxRam: e.target.value })}
-                                />
-                            </label>
-                            {memory && (
-                                <p className="panel__hint">
-                                    This machine supports {memory.absoluteMin.toFixed(1)}G –{' '}
-                                    {memory.absoluteMax.toFixed(0)}G. Use a suffix, e.g. 4G or 4096M.
-                                </p>
-                            )}
-                            <label className="field">
-                                <span>JVM options</span>
-                                <input
-                                    className="input input--inline"
-                                    value={java.jvmOptions.join(' ')}
-                                    onChange={(e) =>
-                                        setJava({
-                                            ...java,
-                                            jvmOptions: e.target.value.split(/\s+/).filter(Boolean)
-                                        })
-                                    }
-                                />
-                            </label>
-
-                            <button className="button" onClick={() => void scan()}>
-                                Scan for Java installations
-                            </button>
-                            {jvms && (
-                                <ul className="jvm-list">
-                                    {jvms.length === 0 && (
-                                        <li className="panel__hint">
-                                            No compatible Java runtime found. Install one matching this
-                                            server&apos;s requirement.
-                                        </li>
-                                    )}
-                                    {jvms.map((j) => (
-                                        <li key={j.path}>
-                                            <button
-                                                className="jvm-list__item"
-                                                onClick={() => setJava({ ...java, executable: j.path })}
-                                            >
-                                                <strong>{j.versionStr}</strong> {j.vendor} ({j.arch})
-                                                <br />
-                                                <span className="panel__hint">{j.path}</span>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                            <p className="panel__hint">
-                                Selected: {java.executable ?? 'automatic (best match)'}
-                            </p>
-                        </>
-                    ) : (
-                        <p className="panel__hint">Select a server to configure Java.</p>
-                    )
-                )}
-
-                {tab === 'mods' && <Mods serverId={serverId} />}
-
-                {tab === 'accounts' && (
-                    <ul className="account-list">
-                        {accounts.length === 0 && <li className="panel__hint">No accounts.</li>}
-                        {accounts.map((a) => (
-                            <li key={a.uuid} className="account-list__item">
-                                <span>
-                                    {a.displayName}{' '}
-                                    <span className="panel__hint">
-                                        ({a.type === 'lunar' ? 'offline' : a.type})
-                                    </span>
-                                </span>
-                                <span className="account-list__actions">
-                                    <button
-                                        className="button"
-                                        onClick={() =>
-                                            void api
-                                                .selectAccount(a.uuid)
-                                                .then(onAccountsChanged)
-                                                .catch(fail)
-                                        }
-                                    >
-                                        Select
-                                    </button>
-                                    <button
-                                        className="button"
-                                        onClick={() =>
-                                            void api
-                                                .removeAccount(a.uuid)
-                                                .then(onAccountsChanged)
-                                                .catch(fail)
-                                        }
-                                    >
-                                        Remove
-                                    </button>
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+        <div id="settingsContainer">
+            <div id="settingsContainerLeft">
+                <div id="settingsNavContainer">
+                    <div id="settingsNavHeader">
+                        <span id="settingsNavHeaderText">Settings</span>
+                    </div>
+                    <div id="settingsNavItemsContainer">
+                        <div id="settingsNavItemsContent">
+                            {NAV.map((n) => (
+                                <button
+                                    key={n.tab}
+                                    className="settingsNavItem"
+                                    {...(tab === n.tab ? { selected: true } : {})}
+                                    onClick={() => setTab(n.tab)}
+                                >
+                                    {n.label}
+                                </button>
+                            ))}
+                            <div className="settingsNavSpacer" />
+                            <div id="settingsNavContentBottom">
+                                <div className="settingsNavDivider" />
+                                <button id="settingsNavDone" onClick={() => void done()}>
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <footer className="settings__footer">
-                {saved && <span className="panel__hint">Saved.</span>}
-                <button className="button button--primary" onClick={() => void save()}>
-                    Save
-                </button>
-            </footer>
+            <div id="settingsContainerRight">
+                <div id="settingsContent">
+                    <div className="settingsTab">
+                        <div className="settingsTabHeader">
+                            <span className="settingsTabHeaderText">{headerText}</span>
+                            <span className="settingsTabHeaderDesc">{headerDesc}</span>
+                        </div>
+
+                        {error && <p className="panel__error">{error}</p>}
+
+                        {tab === 'account' && (
+                            <div className="settingsCurrentAccounts">
+                                {accounts.length === 0 && (
+                                    <span className="settingsFieldDesc">No accounts.</span>
+                                )}
+                                {accounts.map((a) => (
+                                    <div className="settingsFieldContainer" key={a.uuid}>
+                                        <div className="settingsFieldLeft">
+                                            <span className="settingsFieldTitle">
+                                                {a.displayName}
+                                            </span>
+                                            <span className="settingsFieldDesc">
+                                                {a.type === 'lunar' ? 'offline' : a.type}
+                                            </span>
+                                        </div>
+                                        <div className="settingsFieldRight">
+                                            <button
+                                                className="settingsFileSelButton"
+                                                onClick={() =>
+                                                    void api
+                                                        .selectAccount(a.uuid)
+                                                        .then(onAccountsChanged)
+                                                        .catch(fail)
+                                                }
+                                            >
+                                                Select
+                                            </button>
+                                            <button
+                                                className="settingsFileSelButton"
+                                                onClick={() =>
+                                                    void api
+                                                        .removeAccount(a.uuid)
+                                                        .then(onAccountsChanged)
+                                                        .catch(fail)
+                                                }
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {tab === 'minecraft' && settings && (
+                            <>
+                                <div className="settingsFieldContainer">
+                                    <div className="settingsFieldLeft">
+                                        <span className="settingsFieldTitle">Resolution</span>
+                                        <span className="settingsFieldDesc">
+                                            The game window size on launch.
+                                        </span>
+                                    </div>
+                                    <div className="settingsFieldRight">
+                                        <input
+                                            className="settingsFieldValue"
+                                            type="number"
+                                            value={settings.game.resWidth}
+                                            onChange={(e) =>
+                                                setSettings({
+                                                    ...settings,
+                                                    game: {
+                                                        ...settings.game,
+                                                        resWidth: Number(e.target.value)
+                                                    }
+                                                })
+                                            }
+                                        />
+                                        <input
+                                            className="settingsFieldValue"
+                                            type="number"
+                                            value={settings.game.resHeight}
+                                            onChange={(e) =>
+                                                setSettings({
+                                                    ...settings,
+                                                    game: {
+                                                        ...settings.game,
+                                                        resHeight: Number(e.target.value)
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                                <div className="settingsFieldContainer">
+                                    <div className="settingsFieldLeft">
+                                        <span className="settingsFieldTitle">Fullscreen</span>
+                                        <span className="settingsFieldDesc">
+                                            Launch the game in fullscreen.
+                                        </span>
+                                    </div>
+                                    <div className="settingsFieldRight">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.game.fullscreen}
+                                            onChange={(e) =>
+                                                setSettings({
+                                                    ...settings,
+                                                    game: {
+                                                        ...settings.game,
+                                                        fullscreen: e.target.checked
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                                <div className="settingsFieldContainer">
+                                    <div className="settingsFieldLeft">
+                                        <span className="settingsFieldTitle">Auto-connect</span>
+                                        <span className="settingsFieldDesc">
+                                            Join the server automatically on launch.
+                                        </span>
+                                    </div>
+                                    <div className="settingsFieldRight">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.game.autoConnect}
+                                            onChange={(e) =>
+                                                setSettings({
+                                                    ...settings,
+                                                    game: {
+                                                        ...settings.game,
+                                                        autoConnect: e.target.checked
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {tab === 'mods' && <Mods serverId={serverId} />}
+
+                        {tab === 'java' &&
+                            (java ? (
+                                <>
+                                    <div className="settingsFieldContainer">
+                                        <div className="settingsFieldLeft">
+                                            <span className="settingsFieldTitle">Maximum RAM</span>
+                                            <span className="settingsFieldDesc">
+                                                {memory
+                                                    ? `This machine supports ${memory.absoluteMin.toFixed(
+                                                          1
+                                                      )}G – ${memory.absoluteMax.toFixed(0)}G.`
+                                                    : 'Use a suffix, e.g. 4G or 4096M.'}
+                                            </span>
+                                        </div>
+                                        <div className="settingsFieldRight">
+                                            <input
+                                                className="settingsFieldValue"
+                                                value={java.maxRam}
+                                                onChange={(e) =>
+                                                    setJava({ ...java, maxRam: e.target.value })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="settingsFieldContainer">
+                                        <div className="settingsFieldLeft">
+                                            <span className="settingsFieldTitle">Minimum RAM</span>
+                                            <span className="settingsFieldDesc">
+                                                Setting minimum and maximum to the same value may
+                                                reduce lag.
+                                            </span>
+                                        </div>
+                                        <div className="settingsFieldRight">
+                                            <input
+                                                className="settingsFieldValue"
+                                                value={java.minRam}
+                                                onChange={(e) =>
+                                                    setJava({ ...java, minRam: e.target.value })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="settingsFieldContainer">
+                                        <div className="settingsFieldLeft">
+                                            <span className="settingsFieldTitle">
+                                                Java Executable
+                                            </span>
+                                            <span className="settingsFieldDesc">
+                                                Selected: {java.executable ?? 'automatic (best match)'}
+                                            </span>
+                                        </div>
+                                        <div className="settingsFieldRight">
+                                            <button
+                                                className="settingsFileSelButton"
+                                                onClick={() => void scan()}
+                                            >
+                                                Scan
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {jvms && (
+                                        <div className="settingsCurrentAccounts">
+                                            {jvms.length === 0 && (
+                                                <span className="settingsFieldDesc">
+                                                    No compatible Java runtime found.
+                                                </span>
+                                            )}
+                                            {jvms.map((j) => (
+                                                <div className="settingsFieldContainer" key={j.path}>
+                                                    <div className="settingsFieldLeft">
+                                                        <span className="settingsFieldTitle">
+                                                            {j.versionStr} — {j.vendor}
+                                                        </span>
+                                                        <span className="settingsFieldDesc">
+                                                            {j.path}
+                                                        </span>
+                                                    </div>
+                                                    <div className="settingsFieldRight">
+                                                        <button
+                                                            className="settingsFileSelButton"
+                                                            onClick={() =>
+                                                                setJava({
+                                                                    ...java,
+                                                                    executable: j.path
+                                                                })
+                                                            }
+                                                        >
+                                                            Use
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="settingsFieldContainer">
+                                        <div className="settingsFieldLeft">
+                                            <span className="settingsFieldTitle">
+                                                Additional JVM Options
+                                            </span>
+                                            <span className="settingsFieldDesc">
+                                                Space-separated flags passed to the JVM.
+                                            </span>
+                                        </div>
+                                        <div className="settingsFieldRight">
+                                            <input
+                                                className="settingsFieldValue"
+                                                value={java.jvmOptions.join(' ')}
+                                                onChange={(e) =>
+                                                    setJava({
+                                                        ...java,
+                                                        jvmOptions: e.target.value
+                                                            .split(/\s+/)
+                                                            .filter(Boolean)
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <span className="settingsFieldDesc">
+                                    Select a server to configure Java.
+                                </span>
+                            ))}
+
+                        {tab === 'launcher' && settings && (
+                            <div className="settingsFieldContainer">
+                                <div className="settingsFieldLeft">
+                                    <span className="settingsFieldTitle">Data Directory</span>
+                                    <span className="settingsFieldDesc">
+                                        {settings.launcher.dataDirectory}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="settingsFieldContainer">
+                            <div className="settingsFieldLeft">
+                                {saved && (
+                                    <span className="settingsFieldDesc">Saved.</span>
+                                )}
+                            </div>
+                            <div className="settingsFieldRight">
+                                <button className="settingsFileSelButton" onClick={() => void save()}>
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }
