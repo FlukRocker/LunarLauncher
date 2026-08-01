@@ -927,3 +927,55 @@ pub async fn get_server_status(
     };
     Ok(crate::server_status::ping(&address.hostname, address.port).await)
 }
+
+/// Microsoft sign-in via the user's default browser (RFC 8252 loopback).
+///
+/// Preferred over the embedded webview: the user can see the real address
+/// bar, existing sessions and password managers work, and Microsoft has been
+/// progressively restricting embedded webviews for OAuth.
+///
+/// Requires `http://127.0.0.1` to be registered as a redirect URI on the
+/// Azure application; see the auth section of README.md.
+#[tauri::command]
+pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Account> {
+    use crate::microsoft;
+
+    let (redirect_uri, listener) = microsoft::start_loopback().await?;
+    let url = microsoft::authorize_url_for(&redirect_uri);
+
+    open::that(&url)
+        .map_err(|e| Error::Other(format!("Could not open your browser: {e}")))?;
+    tracing::info!(%redirect_uri, "Waiting for the browser to complete sign-in");
+
+    // Don't wait forever if the user abandons the tab.
+    let code = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        microsoft::await_loopback_code(listener),
+    )
+    .await
+    .map_err(|_| Error::Other("Sign-in timed out after 5 minutes.".into()))??;
+
+    let auth = microsoft::full_auth_flow_with_redirect(&code, false, &redirect_uri).await?;
+
+    let account = Account::Microsoft {
+        access_token: auth.mc_access_token,
+        username: auth.profile.name.clone(),
+        uuid: auth.profile.id.clone(),
+        display_name: auth.profile.name,
+        expires_at: microsoft::expiry_from_now(auth.mc_expires_in),
+        microsoft: crate::config::MicrosoftTokens {
+            access_token: auth.ms_access_token,
+            refresh_token: auth.ms_refresh_token,
+            expires_at: microsoft::expiry_from_now(auth.ms_expires_in),
+        },
+    };
+
+    state.config.with_mut(|c| {
+        c.selected_account = Some(auth.profile.id.clone());
+        c.authentication_database.insert(auth.profile.id.clone(), account.clone());
+    })?;
+    state.config.save()?;
+
+    tracing::info!(user = %account.display_name(), "Microsoft login complete (browser)");
+    Ok(account)
+}

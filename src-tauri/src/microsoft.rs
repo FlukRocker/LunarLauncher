@@ -101,14 +101,21 @@ fn client() -> reqwest::Client {
 // ---------------------------------------------------------------------------
 
 /// Exchange an authorization code (or refresh token) for a Microsoft token.
-pub async fn get_access_token(code: &str, refresh: bool) -> Result<AccessTokenResponse> {
+///
+/// `redirect_uri` must match the one the code was obtained with; Microsoft
+/// validates it on redemption.
+pub async fn get_access_token_with_redirect(
+    code: &str,
+    refresh: bool,
+    redirect_uri: &str,
+) -> Result<AccessTokenResponse> {
     let grant_type = if refresh { "refresh_token" } else { "authorization_code" };
     let key = if refresh { "refresh_token" } else { "code" };
 
     let form = [
         ("client_id", AZURE_CLIENT_ID),
         ("scope", "XboxLive.signin offline_access"),
-        ("redirect_uri", REDIRECT_URI),
+        ("redirect_uri", redirect_uri),
         (key, code),
         ("grant_type", grant_type),
     ];
@@ -123,6 +130,11 @@ pub async fn get_access_token(code: &str, refresh: bool) -> Result<AccessTokenRe
         )));
     }
     Ok(resp.json().await?)
+}
+
+/// Convenience wrapper using the embedded-webview redirect URI.
+pub async fn get_access_token(code: &str, refresh: bool) -> Result<AccessTokenResponse> {
+    get_access_token_with_redirect(code, refresh, REDIRECT_URI).await
 }
 
 /// Authenticate with Xbox Live using a Microsoft access token.
@@ -250,6 +262,37 @@ pub async fn get_mc_profile(mc_access_token: &str) -> Result<McProfile> {
     Ok(resp.json().await?)
 }
 
+/// The consent page URL for an arbitrary redirect URI.
+pub fn authorize_url_for(redirect_uri: &str) -> String {
+    let encoded = urlencoding::encode(redirect_uri);
+    format!(
+        "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize\
+?prompt=select_account&client_id={AZURE_CLIENT_ID}&response_type=code\
+&scope=XboxLive.signin%20offline_access&redirect_uri={encoded}"
+    )
+}
+
+/// Run the whole chain, redeeming the code against a specific redirect URI.
+pub async fn full_auth_flow_with_redirect(
+    code: &str,
+    refresh: bool,
+    redirect_uri: &str,
+) -> Result<FullAuth> {
+    let ms = get_access_token_with_redirect(code, refresh, redirect_uri).await?;
+    let xbl = get_xbl_token(&ms.access_token).await?;
+    let xsts = get_xsts_token(&xbl).await?;
+    let mc = get_mc_access_token(&xsts).await?;
+    let profile = get_mc_profile(&mc.access_token).await?;
+    Ok(FullAuth {
+        ms_access_token: ms.access_token,
+        ms_refresh_token: ms.refresh_token,
+        ms_expires_in: ms.expires_in,
+        mc_access_token: mc.access_token,
+        mc_expires_in: mc.expires_in,
+        profile,
+    })
+}
+
 /// Run the whole chain from an authorization code or a refresh token.
 pub async fn full_auth_flow(code: &str, refresh: bool) -> Result<FullAuth> {
     let ms = get_access_token(code, refresh).await?;
@@ -366,5 +409,130 @@ mod tests {
         assert!(u.contains("response_type=code"));
         assert!(u.contains("XboxLive.signin"));
         assert!(u.contains("offline_access"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Loopback (system browser) flow
+// ---------------------------------------------------------------------------
+
+/// Page shown in the browser once the code has been captured.
+const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8>\
+<title>Lunar Launcher</title>\
+<body style=\"background:#171614;color:#fff;font-family:-apple-system,Segoe UI,sans-serif;\
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0\">\
+<div style=\"text-align:center\"><h2>Signed in</h2>\
+<p style=\"opacity:.7\">You can close this tab and return to Lunar Launcher.</p></div>";
+
+const FAIL_PAGE: &str = "<!doctype html><meta charset=utf-8>\
+<title>Lunar Launcher</title>\
+<body style=\"background:#171614;color:#fff;font-family:-apple-system,Segoe UI,sans-serif;\
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0\">\
+<div style=\"text-align:center\"><h2>Sign-in failed</h2>\
+<p style=\"opacity:.7\">Return to Lunar Launcher for details.</p></div>";
+
+fn http_response(body: &str) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
+Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+/// Listen on an ephemeral loopback port for the OAuth redirect.
+///
+/// This is the flow RFC 8252 prescribes for native apps: the consent page
+/// opens in the user's own browser — where the address bar is visible and
+/// existing sessions and password managers work — and the authorization code
+/// comes back to a short-lived local listener rather than being scraped out
+/// of an embedded webview.
+///
+/// Returns the bound redirect URI and a future that resolves with the code.
+pub async fn start_loopback() -> Result<(String, tokio::net::TcpListener)> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    Ok((format!("http://127.0.0.1:{port}"), listener))
+}
+
+/// Accept exactly one request and pull the `code` (or `error`) from it.
+pub async fn await_loopback_code(listener: tokio::net::TcpListener) -> Result<String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (mut sock, _) = listener.accept().await?;
+    let mut buf = vec![0u8; 8192];
+    let n = sock.read(&mut buf).await?;
+    let req = String::from_utf8_lossy(&buf[..n]);
+
+    // First line: "GET /?code=... HTTP/1.1"
+    let target = req
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .unwrap_or("/");
+    let full = format!("http://127.0.0.1{target}");
+
+    let outcome = match extract_code_from_redirect(&full) {
+        Some(code) => Ok(code),
+        None => Err(extract_error_from_redirect(&full)
+            .unwrap_or_else(|| "No authorization code was returned.".into())),
+    };
+
+    let page = if outcome.is_ok() { DONE_PAGE } else { FAIL_PAGE };
+    let _ = sock.write_all(http_response(page).as_bytes()).await;
+    let _ = sock.flush().await;
+
+    outcome.map_err(Error::Other)
+}
+
+#[cfg(test)]
+mod loopback_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn loopback_binds_an_ephemeral_port() {
+        let (uri, listener) = start_loopback().await.unwrap();
+        assert!(uri.starts_with("http://127.0.0.1:"));
+        let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
+        assert!(port > 0);
+        drop(listener);
+    }
+
+    #[tokio::test]
+    async fn loopback_captures_the_code_from_a_real_request() {
+        let (uri, listener) = start_loopback().await.unwrap();
+        let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
+
+        let task = tokio::spawn(await_loopback_code(listener));
+
+        // Pretend to be the browser following the redirect.
+        use tokio::io::AsyncWriteExt;
+        let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        c.write_all(b"GET /?code=M.C123_ABC&state=x HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+
+        assert_eq!(task.await.unwrap().unwrap(), "M.C123_ABC");
+    }
+
+    #[tokio::test]
+    async fn loopback_surfaces_a_denied_consent() {
+        let (uri, listener) = start_loopback().await.unwrap();
+        let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
+        let task = tokio::spawn(await_loopback_code(listener));
+
+        use tokio::io::AsyncWriteExt;
+        let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        c.write_all(b"GET /?error=access_denied&error_description=User%20cancelled HTTP/1.1\r\n\r\n")
+            .await
+            .unwrap();
+
+        let err = task.await.unwrap().unwrap_err().to_string();
+        assert!(err.contains("access_denied"), "got: {err}");
+    }
+
+    #[test]
+    fn authorize_url_encodes_the_loopback_redirect() {
+        let u = authorize_url_for("http://127.0.0.1:51234");
+        assert!(u.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A51234"));
     }
 }

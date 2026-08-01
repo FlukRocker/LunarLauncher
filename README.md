@@ -100,6 +100,18 @@ accounts. `electron_written_config_survives_a_round_trip` guards it.
 
 ## Microsoft authentication
 
+Sign-in opens the consent page in the user's **default browser** and catches
+the authorization code on a short-lived loopback listener, which is the flow
+RFC 8252 prescribes for native apps: the address bar stays visible, existing
+sessions and password managers work, and it avoids the embedded webviews
+Microsoft has been progressively restricting.
+
+This requires `http://127.0.0.1` to be registered as a redirect URI on the
+Azure application, under the *Mobile and desktop applications* platform. If it
+is not, Microsoft rejects the request and the login screen offers an in-app
+window as a fallback, which uses the original `nativeclient` redirect and
+needs no extra configuration.
+
 Third-party forks must register their own Azure application and replace
 `AZURE_CLIENT_ID` in `src-tauri/src/microsoft.rs`. See
 [docs/MicrosoftAuth.md](docs/MicrosoftAuth.md).

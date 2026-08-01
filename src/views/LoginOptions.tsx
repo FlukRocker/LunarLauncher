@@ -35,11 +35,15 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
         }
     }
 
-    const loginMicrosoft = async () => {
+    // Default to the system browser; the embedded window stays available in
+    // case the Azure app has no loopback redirect URI registered.
+    const loginMicrosoft = async (useBrowser: boolean) => {
         setMsftBusy(true)
         setError(null)
         try {
-            await authApi.microsoftLogin()
+            await (useBrowser
+                ? authApi.microsoftLoginBrowser()
+                : authApi.microsoftLogin())
             onLoggedIn()
         } catch (err: unknown) {
             setError(isApiError(err) ? err.message : String(err))
@@ -91,11 +95,23 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                 <button
                     className="button button--primary"
                     disabled={msftBusy}
-                    onClick={() => void loginMicrosoft()}
+                    onClick={() => void loginMicrosoft(true)}
                 >
-                    {msftBusy ? 'Waiting for Microsoft…' : 'Log in with Microsoft'}
+                    {msftBusy ? 'Waiting for your browser…' : 'Log in with Microsoft'}
                 </button>
+                <p className="panel__hint">
+                    Opens in your default browser. Return here once signed in.
+                </p>
                 {error && <p className="panel__error">{error}</p>}
+                {error && (
+                    <button
+                        className="button"
+                        disabled={msftBusy}
+                        onClick={() => void loginMicrosoft(false)}
+                    >
+                        Try the in-app window instead
+                    </button>
+                )}
                 <button className="button" onClick={() => setMode('lunar')}>
                     Offline account
                 </button>

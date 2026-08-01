@@ -220,7 +220,12 @@ export const settingsApi = {
 }
 
 export const authApi = {
-    /** Opens the Microsoft consent window and completes the token chain. */
+    /**
+     * Preferred: opens the consent page in the user's default browser and
+     * catches the redirect on a loopback listener (RFC 8252).
+     */
+    microsoftLoginBrowser: () => invoke<Account>('microsoft_login_browser'),
+    /** Fallback: consent inside an embedded Tauri window. */
     microsoftLogin: () => invoke<Account>('microsoft_login'),
     microsoftLogout: (uuid: string) => invoke<boolean>('microsoft_logout', { uuid }),
     /** Refreshes the selected account if expired. False means re-login needed. */

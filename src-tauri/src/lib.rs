@@ -47,6 +47,7 @@ pub fn run() {
             commands::scan_java,
             commands::launch_game,
             commands::microsoft_login,
+            commands::microsoft_login_browser,
             commands::validate_selected_account,
             commands::microsoft_logout,
             commands::get_java_config,
