@@ -406,7 +406,9 @@ img.mediaSVG {
     color: rgba(255, 255, 255, 0.85);
 }
 
-.settingsNavItem[selected] {
+.settingsNavItem[selected],
+.settingsNavItem[data-selected='true'],
+.settingsNavItem--active {
     color: #ffffff;
     border-left-color: #ffffff;
     background: rgba(255, 255, 255, 0.06);

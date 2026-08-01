@@ -104,8 +104,16 @@ export function Settings({
                             {NAV.map((n) => (
                                 <button
                                     key={n.tab}
-                                    className="settingsNavItem"
-                                    {...(tab === n.tab ? { selected: true } : {})}
+                                    className={
+                                        'settingsNavItem' +
+                                        (tab === n.tab ? ' settingsNavItem--active' : '')
+                                    }
+                                    // React strips `selected` from a <button> — it is only a
+                                    // valid prop on <option> — so launcher.css's
+                                    // [selected] rule can never match. A data attribute
+                                    // reaches the DOM intact and keeps that rule working.
+                                    data-selected={tab === n.tab ? 'true' : undefined}
+                                    aria-current={tab === n.tab ? 'page' : undefined}
                                     onClick={() => setTab(n.tab)}
                                 >
                                     {n.label}
