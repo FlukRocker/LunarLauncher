@@ -458,3 +458,67 @@ img.mediaSVG {
 .mediaContainer {
     height: 38px;
 }
+
+/* --- News pane ---------------------------------------------------------- */
+
+.newsPane {
+    position: absolute;
+    inset: 0;
+    background: rgba(11, 10, 9, 0.94);
+    padding: 40px 12% 60px;
+    overflow-y: auto;
+    z-index: 20;
+    color: #fff;
+    animation: viewFadeIn 0.3s ease both;
+}
+
+.newsPane__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+}
+
+.newsPane__count {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.newsPane__nav {
+    display: flex;
+    gap: 8px;
+}
+
+.newsPane__title {
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 24px;
+    margin: 0 0 6px;
+}
+
+.newsPane__meta {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 20px;
+}
+
+.newsPane__body {
+    font-size: 14px;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.92);
+    user-select: text;
+}
+
+.newsPane__body img {
+    max-width: 100%;
+}
+
+.newsPane__body a {
+    color: #7289da;
+}
+
+.newsPane__link {
+    display: inline-block;
+    margin-top: 24px;
+    color: #7289da;
+    font-size: 13px;
+}

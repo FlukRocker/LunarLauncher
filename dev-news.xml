@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Lunar Launcher News</title>
+    <link>https://example.com</link>
+    <description>Sample feed for local development.</description>
+    <item>
+      <title>Season 4 opens this weekend</title>
+      <link>https://example.com/season-4</link>
+      <dc:creator>FlukRocker</dc:creator>
+      <pubDate>Fri, 01 Aug 2025 10:00:00 +0000</pubDate>
+      <content:encoded><![CDATA[
+        <p>The new season starts <b>Saturday at 18:00</b>. Spawn has been rebuilt and
+        the resource world resets with it.</p>
+        <ul><li>New shop district</li><li>Higher mob caps</li><li>Rebalanced economy</li></ul>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Launcher rewritten on Tauri</title>
+      <link>https://example.com/tauri</link>
+      <dc:creator>FlukRocker</dc:creator>
+      <pubDate>Thu, 31 Jul 2025 09:00:00 +0000</pubDate>
+      <content:encoded><![CDATA[
+        <p>The launcher no longer ships a browser engine, so the installer went from
+        about 103 MB to 17 MB.</p>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Scheduled maintenance</title>
+      <link>https://example.com/maintenance</link>
+      <pubDate>Wed, 30 Jul 2025 22:30:00 +0000</pubDate>
+      <description>Roughly thirty minutes of downtime while we migrate storage.</description>
+    </item>
+  </channel>
+</rss>

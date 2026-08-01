@@ -1,6 +1,6 @@
 {
     "version": "1.0.0",
-    "rss": "",
+    "rss": "./dev-news.xml",
     "servers": [
         {
             "id": "Vanilla-1.20.1",
@@ -13,7 +13,10 @@
             "javaOptions": {
                 "supported": ">=17.x",
                 "suggestedMajor": 17,
-                "ram": { "recommended": 3072, "minimum": 2048 }
+                "ram": {
+                    "recommended": 3072,
+                    "minimum": 2048
+                }
             },
             "mainServer": true,
             "autoconnect": false,

@@ -5,8 +5,10 @@ import {
     isApiError,
     launchApi,
     type Account,
+    newsApi,
     statusApi,
     type LaunchProgress,
+    type Article,
     type Server,
     type ServerStatus
 } from '../lib/api'
@@ -40,6 +42,9 @@ export function Landing({
     const [progress, setProgress] = useState<LaunchProgress | null>(null)
     const [launching, setLaunching] = useState(false)
     const [status, setStatus] = useState<ServerStatus | null>(null)
+    const [news, setNews] = useState<Article[]>([])
+    const [article, setArticle] = useState(0)
+    const [newsOpen, setNewsOpen] = useState(false)
 
     useEffect(() => {
         api.getSelectedServer()
@@ -49,6 +54,12 @@ export function Landing({
                 if (s) void statusApi.getServerStatus(s.id).then(setStatus).catch(() => {})
             })
             .catch((err: unknown) => setError(isApiError(err) ? err.message : String(err)))
+    }, [])
+
+    useEffect(() => {
+        // The feed is optional; a distribution without an rss field simply
+        // leaves the news button disabled.
+        newsApi.getNews().then(setNews).catch(() => setNews([]))
     }, [])
 
     useEffect(() => {
@@ -186,7 +197,16 @@ export function Landing({
                 <div id="center">
                     <div className="bot_wrapper">
                         <div id="content">
-                            <button id="newsButton" disabled title="News feed not yet ported">
+                            <button
+                                id="newsButton"
+                                disabled={news.length === 0}
+                                title={
+                                    news.length === 0
+                                        ? 'No news feed configured for this server'
+                                        : undefined
+                                }
+                                onClick={() => setNewsOpen((v) => !v)}
+                            >
                                 <img src={arrowIcon} id="newsButtonSVG" alt="" />
                                 <span id="newsButtonText">NEWS</span>
                             </button>
@@ -227,6 +247,56 @@ export function Landing({
                     </div>
                 </div>
             </div>
+
+            {newsOpen && news.length > 0 && (
+                <div className="newsPane">
+                    <div className="newsPane__head">
+                        <span className="newsPane__count">
+                            {article + 1} / {news.length}
+                        </span>
+                        <div className="newsPane__nav">
+                            <button
+                                className="button"
+                                disabled={article === 0}
+                                onClick={() => setArticle((i) => i - 1)}
+                            >
+                                Prev
+                            </button>
+                            <button
+                                className="button"
+                                disabled={article >= news.length - 1}
+                                onClick={() => setArticle((i) => i + 1)}
+                            >
+                                Next
+                            </button>
+                            <button className="button" onClick={() => setNewsOpen(false)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                    <h2 className="newsPane__title">{news[article].title}</h2>
+                    <p className="newsPane__meta">
+                        {news[article].author && `${news[article].author} · `}
+                        {news[article].date}
+                    </p>
+                    {/*
+                      Feed bodies are HTML, which is the whole point of the
+                      news pane, so they are rendered as markup. This is only
+                      as trustworthy as the RSS URL in the distribution index —
+                      which the server operator controls, same as every other
+                      field there.
+                    */}
+                    <div
+                        className="newsPane__body"
+                        dangerouslySetInnerHTML={{ __html: news[article].content }}
+                    />
+                    {news[article].link && (
+                        <a className="newsPane__link" href={news[article].link} target="_blank">
+                            Read on the website
+                        </a>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

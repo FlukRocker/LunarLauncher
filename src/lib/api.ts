@@ -308,3 +308,18 @@ export const statusApi = {
     getServerStatus: (serverId: string) =>
         invoke<ServerStatus>('get_server_status', { serverId })
 }
+
+// --- News -----------------------------------------------------------------
+
+export interface Article {
+    title: string
+    link: string
+    author: string
+    date: string
+    /** Feed HTML. Rendered as markup — see the note in News.tsx. */
+    content: string
+}
+
+export const newsApi = {
+    getNews: () => invoke<Article[]>('get_news')
+}

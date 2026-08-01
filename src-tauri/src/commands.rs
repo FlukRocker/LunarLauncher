@@ -1059,3 +1059,16 @@ pub async fn mojang_login(
     tracing::info!(user = %account.display_name(), "Mojang/Yggdrasil login complete");
     Ok(account)
 }
+
+/// Load the news feed named by the distribution's `rss` field.
+///
+/// Returns an empty list when no feed is configured, which the UI shows as a
+/// disabled news button rather than an error.
+#[tauri::command]
+pub async fn get_news(state: State<'_, AppState>) -> Result<Vec<crate::news::Article>> {
+    let rss = {
+        let guard = state.distribution.lock().unwrap();
+        guard.as_ref().and_then(|d| d.rss.clone()).unwrap_or_default()
+    };
+    crate::news::load(&rss).await
+}
