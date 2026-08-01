@@ -17,6 +17,8 @@ pub struct AppState {
     pub distro: DistributionApi,
     /// Cached distribution index for the session, populated by `load_distribution`.
     pub distribution: std::sync::Mutex<Option<Distribution>>,
+    /// Set while a browser sign-in is pending, so it can be cancelled.
+    pub login_cancel: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl AppState {
@@ -25,6 +27,7 @@ impl AppState {
             config: ConfigManager::new(),
             distro: DistributionApi::new(),
             distribution: std::sync::Mutex::new(None),
+            login_cancel: std::sync::Mutex::new(None),
         }
     }
 }
@@ -947,13 +950,29 @@ pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Accou
         .map_err(|e| Error::Other(format!("Could not open your browser: {e}")))?;
     tracing::info!(%redirect_uri, "Waiting for the browser to complete sign-in");
 
-    // Don't wait forever if the user abandons the tab.
-    let code = tokio::time::timeout(
-        std::time::Duration::from_secs(300),
-        microsoft::await_loopback_code(listener),
-    )
-    .await
-    .map_err(|_| Error::Other("Sign-in timed out after 5 minutes.".into()))??;
+    // Race the redirect against an explicit cancel and a timeout, so an
+    // abandoned tab or a user who changes their mind does not leave this
+    // command pending forever.
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    *state.login_cancel.lock().unwrap() = Some(cancel_tx);
+
+    let wait = microsoft::await_loopback_code(listener);
+    tokio::pin!(wait);
+
+    let code = tokio::select! {
+        result = &mut wait => {
+            state.login_cancel.lock().unwrap().take();
+            result?
+        }
+        _ = cancel_rx => {
+            tracing::info!("Browser sign-in cancelled by the user");
+            return Err(Error::Other("Sign-in cancelled.".into()));
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => {
+            state.login_cancel.lock().unwrap().take();
+            return Err(Error::Other("Sign-in timed out after 5 minutes.".into()));
+        }
+    };
 
     let auth = microsoft::full_auth_flow_with_redirect(&code, false, &redirect_uri).await?;
 
@@ -978,4 +997,19 @@ pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Accou
 
     tracing::info!(user = %account.display_name(), "Microsoft login complete (browser)");
     Ok(account)
+}
+
+/// Abort a pending browser sign-in.
+///
+/// Returns false when nothing was waiting, so the frontend can tell a real
+/// cancellation from a stale click.
+#[tauri::command]
+pub fn cancel_microsoft_login(state: State<'_, AppState>) -> bool {
+    match state.login_cancel.lock().unwrap().take() {
+        Some(tx) => {
+            let _ = tx.send(());
+            true
+        }
+        None => false,
+    }
 }

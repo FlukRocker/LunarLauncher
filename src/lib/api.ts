@@ -227,6 +227,8 @@ export const authApi = {
     microsoftLoginBrowser: () => invoke<Account>('microsoft_login_browser'),
     /** Fallback: consent inside an embedded Tauri window. */
     microsoftLogin: () => invoke<Account>('microsoft_login'),
+    /** Aborts a pending browser sign-in. False if nothing was waiting. */
+    cancelMicrosoftLogin: () => invoke<boolean>('cancel_microsoft_login'),
     microsoftLogout: (uuid: string) => invoke<boolean>('microsoft_logout', { uuid }),
     /** Refreshes the selected account if expired. False means re-login needed. */
     validateSelected: () => invoke<boolean>('validate_selected_account')

@@ -1,20 +1,24 @@
 import { useState } from 'react'
 import { api, authApi, isApiError } from '../lib/api'
 
+type Mode = 'choose' | 'lunar' | 'waitingBrowser'
+
 /**
  * Account selection.
  *
- * Note this is where the Electron app had a latent bug: the Lunar button was
- * commented out of loginOptions.ejs while loginOptions.js still bound its
- * onclick, throwing and killing the rest of the script. Here the button either
- * exists or it doesn't, and there is no shared global scope to corrupt.
+ * Microsoft sign-in defaults to the system browser (RFC 8252). Because that
+ * hands control to another application, the launcher shows an explicit
+ * waiting state rather than a spinner on a disabled button — the user needs
+ * to know it is waiting on *them*, and needs a way out if the browser never
+ * comes back or they change their mind.
  */
 export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
-    const [mode, setMode] = useState<'choose' | 'lunar'>('choose')
-    const [msftBusy, setMsftBusy] = useState(false)
+    const [mode, setMode] = useState<Mode>('choose')
     const [username, setUsername] = useState('')
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    const fail = (err: unknown) => setError(isApiError(err) ? err.message : String(err))
 
     const submitLunar = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -29,27 +33,80 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
             await api.addLunarAccount(name)
             onLoggedIn()
         } catch (err: unknown) {
-            setError(isApiError(err) ? err.message : String(err))
+            fail(err)
         } finally {
             setBusy(false)
         }
     }
 
-    // Default to the system browser; the embedded window stays available in
-    // case the Azure app has no loopback redirect URI registered.
-    const loginMicrosoft = async (useBrowser: boolean) => {
-        setMsftBusy(true)
+    const loginBrowser = async () => {
         setError(null)
+        setMode('waitingBrowser')
         try {
-            await (useBrowser
-                ? authApi.microsoftLoginBrowser()
-                : authApi.microsoftLogin())
+            await authApi.microsoftLoginBrowser()
             onLoggedIn()
         } catch (err: unknown) {
-            setError(isApiError(err) ? err.message : String(err))
-        } finally {
-            setMsftBusy(false)
+            fail(err)
+            setMode('choose')
         }
+    }
+
+    const loginEmbedded = async () => {
+        // Release the loopback listener first; leaving it pending would keep
+        // the command alive behind the embedded flow.
+        await authApi.cancelMicrosoftLogin().catch(() => false)
+        setError(null)
+        setBusy(true)
+        try {
+            await authApi.microsoftLogin()
+            onLoggedIn()
+        } catch (err: unknown) {
+            fail(err)
+            setMode('choose')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const cancelBrowser = async () => {
+        await authApi.cancelMicrosoftLogin().catch(() => false)
+        setError(null)
+        setMode('choose')
+    }
+
+    if (mode === 'waitingBrowser') {
+        return (
+            <div className="view view--centered">
+                <div className="panel">
+                    <div className="spinner" role="status" aria-label="Waiting" />
+                    <h2 className="panel__title">Waiting for your browser</h2>
+                    <p className="panel__desc">
+                        A Microsoft sign-in page should have opened in your default browser.
+                        Complete it there and this window will continue automatically.
+                    </p>
+                    <p className="panel__hint">
+                        Nothing opened? Your Microsoft account may not permit browser sign-in
+                        for this launcher — use the in-app window instead.
+                    </p>
+                    <div className="panel__actions">
+                        <button
+                            className="button"
+                            disabled={busy}
+                            onClick={() => void cancelBrowser()}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="button button--primary"
+                            disabled={busy}
+                            onClick={() => void loginEmbedded()}
+                        >
+                            {busy ? 'Opening…' : 'Use in-app window'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     if (mode === 'lunar') {
@@ -94,24 +151,16 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                 <h2 className="panel__title">Choose an account type</h2>
                 <button
                     className="button button--primary"
-                    disabled={msftBusy}
-                    onClick={() => void loginMicrosoft(true)}
+                    disabled={busy}
+                    onClick={() => void loginBrowser()}
                 >
-                    {msftBusy ? 'Waiting for your browser…' : 'Log in with Microsoft'}
+                    Log in with Microsoft
                 </button>
-                <p className="panel__hint">
-                    Opens in your default browser. Return here once signed in.
-                </p>
+                <p className="panel__hint">Opens in your default browser.</p>
                 {error && <p className="panel__error">{error}</p>}
-                {error && (
-                    <button
-                        className="button"
-                        disabled={msftBusy}
-                        onClick={() => void loginMicrosoft(false)}
-                    >
-                        Try the in-app window instead
-                    </button>
-                )}
+                <button className="button" disabled={busy} onClick={() => void loginEmbedded()}>
+                    Log in with Microsoft (in-app window)
+                </button>
                 <button className="button" onClick={() => setMode('lunar')}>
                     Offline account
                 </button>
