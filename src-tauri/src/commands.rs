@@ -722,3 +722,188 @@ pub fn discord_set_details(
 pub fn discord_disconnect(discord: State<'_, crate::discord::DiscordState>) {
     discord.shutdown();
 }
+
+// ---------------------------------------------------------------------------
+// Mod manager
+// ---------------------------------------------------------------------------
+
+/// An optional module the distribution declares, which the user may turn off.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionalMod {
+    pub id: String,
+    pub name: String,
+    pub required: bool,
+    pub enabled: bool,
+}
+
+fn instance_dir_for(state: &AppState, server_id: &str) -> Result<std::path::PathBuf> {
+    let data = state.config.with(|c| c.settings.launcher.data_directory.clone())?;
+    Ok(data.join("instances").join(server_id))
+}
+
+/// Mods the distribution declares for a server, with their on/off state.
+///
+/// Required modules are listed too, marked so the UI can show them as locked
+/// — the Electron settings view did the same, since seeing what a server
+/// forces on you is useful even when you cannot change it.
+#[tauri::command]
+pub fn get_distribution_mods(
+    state: State<'_, AppState>,
+    server_id: String,
+) -> Result<Vec<OptionalMod>> {
+    use crate::distribution::ModuleType;
+
+    let guard = state.distribution.lock().unwrap();
+    let distro = guard.as_ref().ok_or(Error::NoDistribution)?;
+    let server = distro
+        .server_by_id(&server_id)
+        .ok_or_else(|| Error::UnknownServer(server_id.clone()))?;
+
+    let saved: std::collections::HashMap<String, bool> = state.config.with(|c| {
+        c.mod_configurations
+            .iter()
+            .find(|m| m.id == server_id)
+            .and_then(|m| m.mods.as_object().cloned())
+            .map(|o| {
+                o.into_iter()
+                    .filter_map(|(k, v)| v.as_bool().map(|b| (k, b)))
+                    .collect()
+            })
+            .unwrap_or_default()
+    })?;
+
+    Ok(server
+        .modules
+        .iter()
+        .filter(|m| {
+            matches!(
+                m.module_type,
+                ModuleType::ForgeMod | ModuleType::LiteMod | ModuleType::FabricMod
+            )
+        })
+        .map(|m| {
+            let required = m.required.as_ref().map(|r| r.value()).unwrap_or(true);
+            let default_on = m.required.as_ref().map(|r| r.default_on()).unwrap_or(true);
+            OptionalMod {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                required,
+                enabled: if required {
+                    true
+                } else {
+                    saved.get(&m.id).copied().unwrap_or(default_on)
+                },
+            }
+        })
+        .collect())
+}
+
+/// Persist an optional module's on/off state for a server.
+#[tauri::command]
+pub fn set_distribution_mod_enabled(
+    state: State<'_, AppState>,
+    server_id: String,
+    mod_id: String,
+    enabled: bool,
+) -> Result<()> {
+    state.config.with_mut(|c| {
+        let entry = match c.mod_configurations.iter_mut().find(|m| m.id == server_id) {
+            Some(e) => e,
+            None => {
+                c.mod_configurations.push(crate::config::ModConfiguration {
+                    id: server_id.clone(),
+                    mods: serde_json::json!({}),
+                });
+                c.mod_configurations.last_mut().unwrap()
+            }
+        };
+        if !entry.mods.is_object() {
+            entry.mods = serde_json::json!({});
+        }
+        entry.mods[&mod_id] = serde_json::Value::Bool(enabled);
+    })?;
+    state.config.save()
+}
+
+/// Mods the user dropped into the instance's mods folder.
+#[tauri::command]
+pub fn get_dropin_mods(
+    state: State<'_, AppState>,
+    server_id: String,
+) -> Result<Vec<crate::mods::DropinMod>> {
+    let version = {
+        let guard = state.distribution.lock().unwrap();
+        guard
+            .as_ref()
+            .and_then(|d| d.server_by_id(&server_id).map(|s| s.minecraft_version.clone()))
+            .unwrap_or_default()
+    };
+    Ok(crate::mods::scan(&instance_dir_for(&state, &server_id)?, &version))
+}
+
+/// Enable or disable a drop-in mod. Returns its new handle, since the file
+/// is renamed.
+#[tauri::command]
+pub fn toggle_dropin_mod(
+    state: State<'_, AppState>,
+    server_id: String,
+    full_name: String,
+    enable: bool,
+) -> Result<String> {
+    crate::mods::toggle(&instance_dir_for(&state, &server_id)?, &full_name, enable)
+}
+
+/// Move a drop-in mod to the trash.
+#[tauri::command]
+pub fn delete_dropin_mod(
+    state: State<'_, AppState>,
+    server_id: String,
+    full_name: String,
+) -> Result<()> {
+    crate::mods::delete(&instance_dir_for(&state, &server_id)?, &full_name)
+}
+
+/// Copy chosen jars into the instance's mods folder. Returns how many were
+/// accepted; unrecognised files are skipped rather than failing the batch.
+#[tauri::command]
+pub fn add_dropin_mods(
+    state: State<'_, AppState>,
+    server_id: String,
+    paths: Vec<std::path::PathBuf>,
+) -> Result<usize> {
+    crate::mods::add(&instance_dir_for(&state, &server_id)?, &paths)
+}
+
+/// Reveal the mods folder in the OS file manager.
+#[tauri::command]
+pub fn open_mods_folder(state: State<'_, AppState>, server_id: String) -> Result<()> {
+    let dir = crate::mods::mods_dir(&instance_dir_for(&state, &server_id)?);
+    std::fs::create_dir_all(&dir)?;
+    open::that(&dir).map_err(|e| Error::Other(format!("Could not open {}: {e}", dir.display())))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderState {
+    pub packs: Vec<crate::mods::Shaderpack>,
+    pub selected: String,
+}
+
+#[tauri::command]
+pub fn get_shaderpacks(state: State<'_, AppState>, server_id: String) -> Result<ShaderState> {
+    let dir = instance_dir_for(&state, &server_id)?;
+    Ok(ShaderState {
+        packs: crate::mods::scan_shaderpacks(&dir),
+        selected: crate::mods::enabled_shaderpack(&dir),
+    })
+}
+
+#[tauri::command]
+pub fn set_shaderpack(
+    state: State<'_, AppState>,
+    server_id: String,
+    pack: String,
+) -> Result<()> {
+    crate::mods::set_enabled_shaderpack(&instance_dir_for(&state, &server_id)?, &pack)
+}

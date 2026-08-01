@@ -233,3 +233,53 @@ export const discordApi = {
         invoke<void>('discord_set_details', { details, stateLine }),
     disconnect: () => invoke<void>('discord_disconnect')
 }
+
+// --- Mod manager ----------------------------------------------------------
+
+export interface OptionalMod {
+    id: string
+    name: string
+    /** Required mods are shown but cannot be turned off. */
+    required: boolean
+    enabled: boolean
+}
+
+export interface DropinMod {
+    /** Handle for toggle/delete; includes any version folder and .disabled. */
+    fullName: string
+    name: string
+    ext: string
+    disabled: boolean
+}
+
+export interface Shaderpack {
+    fullname: string
+    name: string
+}
+
+export interface ShaderState {
+    packs: Shaderpack[]
+    selected: string
+}
+
+export const modsApi = {
+    getDistributionMods: (serverId: string) =>
+        invoke<OptionalMod[]>('get_distribution_mods', { serverId }),
+    setDistributionModEnabled: (serverId: string, modId: string, enabled: boolean) =>
+        invoke<void>('set_distribution_mod_enabled', { serverId, modId, enabled }),
+
+    getDropinMods: (serverId: string) =>
+        invoke<DropinMod[]>('get_dropin_mods', { serverId }),
+    /** Returns the mod's new handle, since the file is renamed. */
+    toggleDropinMod: (serverId: string, fullName: string, enable: boolean) =>
+        invoke<string>('toggle_dropin_mod', { serverId, fullName, enable }),
+    deleteDropinMod: (serverId: string, fullName: string) =>
+        invoke<void>('delete_dropin_mod', { serverId, fullName }),
+    addDropinMods: (serverId: string, paths: string[]) =>
+        invoke<number>('add_dropin_mods', { serverId, paths }),
+    openModsFolder: (serverId: string) => invoke<void>('open_mods_folder', { serverId }),
+
+    getShaderpacks: (serverId: string) => invoke<ShaderState>('get_shaderpacks', { serverId }),
+    setShaderpack: (serverId: string, pack: string) =>
+        invoke<void>('set_shaderpack', { serverId, pack })
+}

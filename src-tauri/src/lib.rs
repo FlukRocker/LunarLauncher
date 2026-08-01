@@ -6,6 +6,7 @@ pub mod dl;
 pub mod java;
 pub mod error;
 pub mod microsoft;
+pub mod mods;
 pub mod paths;
 pub mod process_builder;
 
@@ -52,6 +53,15 @@ pub fn run() {
             commands::discord_connect,
             commands::discord_set_details,
             commands::discord_disconnect,
+            commands::get_distribution_mods,
+            commands::set_distribution_mod_enabled,
+            commands::get_dropin_mods,
+            commands::toggle_dropin_mod,
+            commands::delete_dropin_mod,
+            commands::add_dropin_mods,
+            commands::open_mods_folder,
+            commands::get_shaderpacks,
+            commands::set_shaderpack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");

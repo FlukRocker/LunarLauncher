@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Mods } from './Mods'
 import {
     api,
     isApiError,
@@ -11,7 +12,7 @@ import {
     type Settings as AppSettings
 } from '../lib/api'
 
-type Tab = 'game' | 'java' | 'accounts'
+type Tab = 'game' | 'java' | 'mods' | 'accounts'
 
 /**
  * Settings, replacing the Electron settings.ejs/settings.js pair.
@@ -71,13 +72,19 @@ export function Settings({
     return (
         <div className="view settings">
             <nav className="settings__tabs">
-                {(['game', 'java', 'accounts'] as Tab[]).map((t) => (
+                {(['game', 'java', 'mods', 'accounts'] as Tab[]).map((t) => (
                     <button
                         key={t}
                         className={`settings__tab${tab === t ? ' settings__tab--active' : ''}`}
                         onClick={() => setTab(t)}
                     >
-                        {t === 'game' ? 'Game' : t === 'java' ? 'Java' : 'Accounts'}
+                        {t === 'game'
+                            ? 'Game'
+                            : t === 'java'
+                              ? 'Java'
+                              : t === 'mods'
+                                ? 'Mods'
+                                : 'Accounts'}
                     </button>
                 ))}
                 <div className="settings__spacer" />
@@ -223,6 +230,8 @@ export function Settings({
                         <p className="panel__hint">Select a server to configure Java.</p>
                     )
                 )}
+
+                {tab === 'mods' && <Mods serverId={serverId} />}
 
                 {tab === 'accounts' && (
                     <ul className="account-list">
