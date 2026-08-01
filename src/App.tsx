@@ -55,6 +55,18 @@ export function App() {
         document.body.style.backgroundImage = `url('${backgroundUrl}')`
     }, [])
 
+    // The title bar sits above every pane (z-index 100 in launcher.css), so it
+    // cannot inherit their backdrop. Helios solved this by assigning
+    // frameBar.style.backgroundColor from JS; here the current view is
+    // reflected onto the root element and CSS keys off it, so the bar tracks
+    // whatever surface is open instead of staying on the base scrim.
+    useEffect(() => {
+        document.documentElement.dataset.view = view
+        return () => {
+            delete document.documentElement.dataset.view
+        }
+    }, [view])
+
     useEffect(() => {
         let cancelled = false
 

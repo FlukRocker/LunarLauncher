@@ -62,6 +62,15 @@ export function Landing({
         newsApi.getNews().then(setNews).catch(() => setNews([]))
     }, [])
 
+    // News is a view within the landing view, so it needs its own flag for the
+    // title bar to follow it.
+    useEffect(() => {
+        document.documentElement.dataset.news = newsOpen ? 'open' : 'closed'
+        return () => {
+            delete document.documentElement.dataset.news
+        }
+    }, [newsOpen])
+
     useEffect(() => {
         const unlisten = listen<LaunchProgress>('launch://progress', (e) =>
             setProgress(e.payload)

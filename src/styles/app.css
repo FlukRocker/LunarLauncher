@@ -1,4 +1,22 @@
 /*
+ * Surface system, taken from launcher.css rather than invented.
+ *
+ * Helios uses two levels over the game background:
+ *   --scrim   rgba(0,0,0,.50)  full-panel backdrops (settings, overlay, title bar)
+ *   --surface rgba(0,0,0,.25)  content cards sitting on that scrim
+ *
+ * --reading-surface is a third tier with no Helios equivalent: its news view
+ * slides up to replace the landing view, so nothing sits behind it. Ours
+ * overlays, so long-form text needs an opaque backing.
+ */
+:root {
+    --scrim: rgba(0, 0, 0, 0.5);
+    --surface: rgba(0, 0, 0, 0.25);
+    --surface-hover: rgba(0, 0, 0, 0.38);
+    --reading-surface: rgba(11, 10, 9, 0.97);
+}
+
+/*
  * Supplemental styling on top of the ported launcher.css.
  *
  * launcher.css covers everything the Electron UI had. What remains here is
@@ -534,4 +552,21 @@ img.mediaSVG {
  */
 #frameBar {
     background-color: var(--scrim);
+}
+
+/*
+ * Title bar follows the open surface.
+ *
+ * #frameBar carries z-index 100 in launcher.css, so it renders above every
+ * pane and cannot pick up their backdrop. The Electron build assigned its
+ * colour from JS for the same reason; here the root element carries the
+ * current view and the bar matches whatever is open, so the top strip never
+ * reads lighter than the panel beneath it.
+ */
+:root[data-view='settings'] #frameBar,
+:root[data-view='loginOptions'] #frameBar,
+:root[data-view='welcome'] #frameBar,
+:root[data-view='fatal'] #frameBar,
+:root[data-news='open'] #frameBar {
+    background-color: var(--reading-surface);
 }
