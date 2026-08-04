@@ -57,6 +57,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
@@ -101,6 +102,7 @@ pub fn run() {
             commands::is_game_running,
             commands::get_game_log,
             commands::clear_game_log,
+            commands::export_diagnostics,
             commands::get_telemetry,
             commands::save_telemetry,
         ])

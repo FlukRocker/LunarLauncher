@@ -1362,3 +1362,118 @@ mod tests {
         assert_eq!(got.len(), MAX_MODULE_DEPTH, "walk stops at the cap");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+/// Build a support report for a failure the user hit.
+///
+/// Deliberately assembled here rather than in the frontend, because the useful
+/// context — resolved paths, the JVM actually chosen, recent game output —
+/// only exists on this side.
+///
+/// Nothing secret is included. The config carries Microsoft access and refresh
+/// tokens; a report is meant to be pasted into a Discord thread, so accounts
+/// are summarised by type and never by token or even by full UUID.
+#[tauri::command]
+pub fn export_diagnostics(
+    state: State<'_, AppState>,
+    error_context: Option<String>,
+) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let mut r = String::new();
+    let _ = writeln!(r, "Lunar Launcher diagnostics");
+    let _ = writeln!(r, "==========================");
+    let _ = writeln!(r, "version    {}", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(
+        r,
+        "platform   {} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+
+    if let Some(err) = &error_context {
+        let _ = writeln!(r, "\n-- what went wrong --\n{err}");
+    }
+
+    let _ = writeln!(r, "\n-- distribution --");
+    let _ = writeln!(r, "source     {}", state.distro.source_description());
+    match &*state.distribution.lock().unwrap() {
+        Some(d) => {
+            let _ = writeln!(r, "loaded     yes ({} servers)", d.servers.len());
+            for s in &d.servers {
+                let _ = writeln!(
+                    r,
+                    "  - {} [{}] mc={} modules={}",
+                    s.id,
+                    if s.main_server { "main" } else { "alt" },
+                    s.minecraft_version,
+                    s.modules.len()
+                );
+            }
+        }
+        None => {
+            let _ = writeln!(r, "loaded     NO — this alone prevents launching");
+        }
+    }
+
+    let _ = writeln!(r, "\n-- configuration --");
+    if let Ok(cfg) = state.config.with(|c| c.clone()) {
+        let _ = writeln!(r, "data dir   {}", cfg.settings.launcher.data_directory.display());
+        let _ = writeln!(r, "server     {}", cfg.selected_server.as_deref().unwrap_or("(none)"));
+        let _ = writeln!(
+            r,
+            "resolution {}x{} fullscreen={}",
+            cfg.settings.game.res_width, cfg.settings.game.res_height, cfg.settings.game.fullscreen
+        );
+
+        // Accounts by type only. Never the token, and only enough of the uuid
+        // to correlate against a server log.
+        let _ = writeln!(r, "accounts   {}", cfg.authentication_database.len());
+        for a in cfg.authentication_database.values() {
+            let kind = match a {
+                Account::Microsoft { .. } => "microsoft",
+                Account::Mojang { .. } => "mojang",
+                Account::Lunar { .. } => "offline",
+            };
+            let uuid = a.uuid();
+            let short = uuid.get(..8).unwrap_or(uuid);
+            let selected = cfg.selected_account.as_deref() == Some(uuid);
+            let _ = writeln!(
+                r,
+                "  - {kind} {short}…{}",
+                if selected { " (selected)" } else { "" }
+            );
+        }
+
+        for (server, j) in &cfg.java_config {
+            let _ = writeln!(
+                r,
+                "java[{server}] {}..{} exec={} opts={}",
+                j.min_ram,
+                j.max_ram,
+                j.executable
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "(auto)".into()),
+                j.jvm_options.join(" ")
+            );
+        }
+    } else {
+        let _ = writeln!(r, "(configuration not loaded)");
+    }
+
+    let log = state.game_log.lock().unwrap();
+    let _ = writeln!(r, "\n-- game output (last {} of {} lines) --", 200.min(log.len()), log.len());
+    if log.is_empty() {
+        let _ = writeln!(r, "(the game has not been launched this session)");
+    } else {
+        for line in log.iter().skip(log.len().saturating_sub(200)) {
+            let _ = writeln!(r, "{line}");
+        }
+    }
+
+    Ok(r)
+}

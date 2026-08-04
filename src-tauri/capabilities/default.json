@@ -2,21 +2,22 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permissions for the launcher's main window. Tauri 2 denies every frontend API by default, so anything src/ calls must be listed here explicitly.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
-
     "shell:default",
     "dialog:default",
     "opener:default",
-    "updater:default"
+    "updater:default",
+    "fs:allow-write-text-file",
+    "dialog:allow-save"
   ]
 }

@@ -685,3 +685,92 @@ img.mediaSVG {
     color: rgba(255, 255, 255, 0.75);
     cursor: pointer;
 }
+
+/* --- Error dialog ------------------------------------------------------- */
+
+.errorModal__scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    z-index: 200;
+    animation: viewFadeIn 0.18s ease both;
+}
+
+.errorModal {
+    background: var(--reading-surface);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 24px 26px;
+    color: #fff;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.errorModal__title {
+    margin: 0 0 8px;
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 19px;
+    /* Red on the title alone. Colouring the body text too makes a long message
+       harder to read, not more urgent. */
+    color: #ff8f8f;
+}
+
+.errorModal__message {
+    margin: 0 0 16px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.92);
+    user-select: text;
+}
+
+.errorModal__disclose {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 12px;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.errorModal__detail {
+    margin: 10px 0 0;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+}
+
+.errorModal__status {
+    margin: 14px 0 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+    user-select: text;
+}
+
+.errorModal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.errorModal__note {
+    margin: 14px 0 0;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    line-height: 1.5;
+}

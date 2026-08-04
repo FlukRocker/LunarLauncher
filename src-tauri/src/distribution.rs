@@ -475,6 +475,11 @@ impl DistributionApi {
         }
     }
 
+    /// Human-readable source, for diagnostics.
+    pub fn source_description(&self) -> String {
+        self.source.describe()
+    }
+
     pub async fn get(&self) -> Result<Distribution> {
         match self.pull_source().await {
             Ok(distro) => Ok(distro),

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { ErrorModal, type LauncherError } from '../components/ErrorModal'
 import {
     api,
     isApiError,
@@ -41,6 +42,7 @@ export function Landing({
 }) {
     const [server, setServer] = useState<Server | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [modal, setModal] = useState<LauncherError | null>(null)
     const [progress, setProgress] = useState<LaunchProgress | null>(null)
     const [launching, setLaunching] = useState(false)
     const [status, setStatus] = useState<ServerStatus | null>(null)
@@ -115,7 +117,15 @@ export function Landing({
         try {
             await launchApi.launchGame()
         } catch (err: unknown) {
-            setError(isApiError(err) ? err.message : String(err))
+            const message = isApiError(err) ? err.message : String(err)
+            setError(message)
+            // A launch failure is the one the user most needs to act on and
+            // report, so it gets the dialog rather than a line of red text.
+            setModal({
+                title: 'The game could not be launched',
+                message,
+                detail: isApiError(err) ? `${err.kind}: ${err.message}` : String(err)
+            })
         } finally {
             setLaunching(false)
         }
@@ -150,6 +160,7 @@ export function Landing({
 
     return (
         <div id="landingContainer">
+            {modal && <ErrorModal error={modal} onClose={() => setModal(null)} />}
             <div id="upper">
                 <div id="left">
                     <div id="image_seal_container">

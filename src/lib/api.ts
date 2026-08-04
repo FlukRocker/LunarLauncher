@@ -373,3 +373,14 @@ export const telemetryApi = {
     get: () => invoke<TelemetryConfig>('get_telemetry'),
     save: (telemetry: TelemetryConfig) => invoke<void>('save_telemetry', { telemetry })
 }
+
+// --- Diagnostics ----------------------------------------------------------
+
+export const diagnosticsApi = {
+    /**
+     * Build a support report. Assembled in Rust, where the useful context
+     * lives. Redacted: no tokens, no full account UUIDs.
+     */
+    export: (errorContext?: string) =>
+        invoke<string>('export_diagnostics', { errorContext: errorContext ?? null })
+}
