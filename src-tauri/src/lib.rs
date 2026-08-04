@@ -4,6 +4,7 @@ pub mod discord;
 pub mod distribution;
 pub mod dl;
 pub mod java;
+pub mod loader;
 pub mod error;
 pub mod microsoft;
 pub mod mods;
