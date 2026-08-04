@@ -50,7 +50,18 @@ export function Landing({
     const [article, setArticle] = useState(0)
     const [newsOpen, setNewsOpen] = useState(false)
     const [playing, setPlaying] = useState(false)
+    const [servers, setServers] = useState<Server[]>([])
+    const [picking, setPicking] = useState(false)
     const [links, setLinks] = useState<SocialLinks | null>(null)
+
+    useEffect(() => {
+        // The full list, so the selector has something to offer. A
+        // distribution with one server hides the control entirely rather than
+        // presenting a menu with a single entry.
+        api.getDistribution()
+            .then((d) => setServers(d.servers))
+            .catch(() => setServers([]))
+    }, [])
 
     useEffect(() => {
         api.getSelectedServer()
@@ -297,9 +308,70 @@ export function Landing({
                                 {playing ? 'PLAYING' : 'PLAY'}
                             </button>
                             <div className="bot_divider" />
-                            <button id="server_selection_button" className="bot_label">
+                            <button
+                                id="server_selection_button"
+                                className="bot_label"
+                                // Switching servers mid-download would leave
+                                // files half-written against the wrong
+                                // instance, so this is inert while busy.
+                                disabled={launching || playing || servers.length < 2}
+                                title={
+                                    servers.length < 2
+                                        ? 'This distribution has only one server'
+                                        : 'Change server'
+                                }
+                                onClick={() => setPicking((v) => !v)}
+                            >
                                 {server ? `• ${server.name}` : '• No Server Selected'}
                             </button>
+
+                            {picking && (
+                                <ul className="serverPicker">
+                                    {servers.map((s) => (
+                                        <li key={s.id}>
+                                            <button
+                                                className={`serverPicker__item${
+                                                    server?.id === s.id
+                                                        ? ' serverPicker__item--active'
+                                                        : ''
+                                                }`}
+                                                onClick={() => {
+                                                    setPicking(false)
+                                                    void api
+                                                        .setSelectedServer(s.id)
+                                                        .then(() => api.getSelectedServer())
+                                                        .then((sel) => {
+                                                            setServer(sel)
+                                                            setError(null)
+                                                            // Status belongs to
+                                                            // the old server.
+                                                            setStatus(null)
+                                                            if (sel)
+                                                                void statusApi
+                                                                    .getServerStatus(sel.id)
+                                                                    .then(setStatus)
+                                                                    .catch(() => {})
+                                                        })
+                                                        .catch((err: unknown) =>
+                                                            setError(
+                                                                isApiError(err)
+                                                                    ? err.message
+                                                                    : String(err)
+                                                            )
+                                                        )
+                                                }}
+                                            >
+                                                <span className="serverPicker__name">
+                                                    {s.name}
+                                                </span>
+                                                <span className="serverPicker__meta">
+                                                    {s.minecraftVersion}
+                                                </span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
                         <div
                             id="launch_details"

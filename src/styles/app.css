@@ -774,3 +774,59 @@ img.mediaSVG {
     color: rgba(255, 255, 255, 0.55);
     line-height: 1.5;
 }
+
+/* --- Server picker ------------------------------------------------------ */
+
+.serverPicker {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin: 0 0 10px;
+    padding: 6px;
+    list-style: none;
+    min-width: 240px;
+    background: var(--reading-surface);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    z-index: 30;
+    animation: viewFadeIn 0.16s ease both;
+}
+
+.serverPicker__item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    background: none;
+    border: 0;
+    border-left: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 8px 10px;
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.serverPicker__item:hover {
+    background: var(--surface);
+    color: #fff;
+}
+
+.serverPicker__item--active {
+    color: #fff;
+    border-left-color: #fff;
+    background: var(--surface);
+}
+
+.serverPicker__meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    flex: none;
+}
+
+/* The picker anchors to this, so it needs to be a positioning context. */
+#launch_content {
+    position: relative;
+}
