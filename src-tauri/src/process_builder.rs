@@ -797,7 +797,6 @@ mod loader_tests {
 
     #[test]
     fn a_vanilla_launch_is_unchanged_by_the_loader_path() {
-        let c = ctx();
         let with = classpath_with_loader(Path::new("/data/common"), &version("1.20.1", true), None);
         let without = classpath(Path::new("/data/common"), &version("1.20.1", true));
         assert_eq!(with, without);

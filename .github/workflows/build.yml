@@ -57,6 +57,11 @@ jobs:
       - name: Typecheck
         run: npm run lint
 
+      # --lib only: the binary target embeds the frontend via
+      # generate_context!, so building it needs dist/ to exist. On a cold CI
+      # checkout that has not been produced yet, and a unit test has no reason
+      # to require it. Caught by a container build, where the warm local
+      # target/ was not there to hide it.
       - name: Test
         run: npm run test:rust
 
