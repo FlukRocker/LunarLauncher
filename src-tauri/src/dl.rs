@@ -775,3 +775,46 @@ mod integration {
         let _ = tokio::fs::remove_dir_all(std::env::temp_dir().join("lunar-dl-integration")).await;
     }
 }
+
+/// Download files that carry no publishable hash.
+///
+/// Fabric's metadata does not include checksums, so its libraries cannot be
+/// validated the way Mojang's assets are. This is a deliberately separate
+/// function rather than a flag on `download_all`: hash validation is the
+/// property that makes the normal path trustworthy, and skipping it should be
+/// visible at the call site rather than hidden behind an argument.
+pub async fn download_unverified(assets: &[Asset], concurrency: usize) -> Result<()> {
+    use futures::stream::StreamExt;
+
+    if assets.is_empty() {
+        return Ok(());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()?;
+
+    // Each future owns its asset: borrowing from the slice makes them
+    // non-'static, which buffer_unordered will not accept.
+    let owned: Vec<Asset> = assets.to_vec();
+    let results: Vec<Result<()>> = futures::stream::iter(owned.into_iter().map(|asset| {
+        let client = client.clone();
+        async move {
+            let bytes = client
+                .get(&asset.url)
+                .send()
+                .await?
+                .error_for_status()?
+                .bytes()
+                .await?;
+            write_atomic(&asset.path, &bytes).await
+        }
+    }))
+    .buffer_unordered(concurrency.max(1))
+    .collect()
+    .await;
+
+    for r in results {
+        r?;
+    }
+    Ok(())
+}

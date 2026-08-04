@@ -39,6 +39,9 @@ pub struct LaunchContext {
     /// `server_id` is used for `${version_name}`, matching the JS, which
     /// passes the distribution server id rather than the vanilla version.
     pub server_id: String,
+    /// Mod loader contribution, when the server declares one. Absent for
+    /// vanilla.
+    pub loader: Option<crate::loader::LoaderProfile>,
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +76,37 @@ pub fn classpath(common_dir: &Path, version_json: &VersionJson) -> Vec<PathBuf> 
     }
 
     out.push(version_jar_path(common_dir, &version_json.id));
+    out
+}
+
+/// Classpath including a mod loader's libraries.
+///
+/// Loader libraries go **first**. The JVM resolves a class from the earliest
+/// entry that provides it, and a loader ships patched versions of classes the
+/// vanilla jar also contains — putting it after would silently load the
+/// unpatched class and fail in ways that look nothing like a classpath
+/// problem.
+pub fn classpath_with_loader(
+    common_dir: &Path,
+    version_json: &VersionJson,
+    loader: Option<&crate::loader::LoaderProfile>,
+) -> Vec<PathBuf> {
+    let lib_dir = library_dir(common_dir);
+    let mut out = Vec::new();
+
+    if let Some(profile) = loader {
+        for lib in &profile.libraries {
+            match lib.maven_path() {
+                Ok(rel) => match crate::paths::safe_join(&lib_dir, &rel) {
+                    Ok(p) => out.push(p),
+                    Err(err) => tracing::warn!(%err, name = %lib.name, "skipping loader library"),
+                },
+                Err(err) => tracing::warn!(%err, "skipping malformed loader coordinate"),
+            }
+        }
+    }
+
+    out.extend(classpath(common_dir, version_json));
     out
 }
 
@@ -291,7 +325,7 @@ fn substitute(arg: &str, table: &HashMap<&'static str, String>) -> String {
 
 /// Build the full JVM argument vector for a vanilla launch.
 pub fn build_args(ctx: &LaunchContext, version_json: &VersionJson) -> Vec<String> {
-    let cp = classpath(&ctx.common_dir, version_json);
+    let cp = classpath_with_loader(&ctx.common_dir, version_json, ctx.loader.as_ref());
     let cp_str = cp
         .iter()
         .map(|p| p.display().to_string())
@@ -319,6 +353,10 @@ pub fn build_args(ctx: &LaunchContext, version_json: &VersionJson) -> Vec<String
         args.push(cp_str.clone());
     }
 
+    if let Some(l) = &ctx.loader {
+        args.extend(l.jvm_args.iter().cloned());
+    }
+
     if cfg!(target_os = "macos") {
         args.push("-Xdock:name=Lunar Launcher".into());
     }
@@ -326,7 +364,12 @@ pub fn build_args(ctx: &LaunchContext, version_json: &VersionJson) -> Vec<String
     args.push(format!("-Xms{}", ctx.java_config.min_ram));
     args.extend(ctx.java_config.jvm_options.iter().cloned());
 
-    args.push(version_json.main_class.clone());
+    // The loader replaces the entry point; that is how it gets control before
+    // the game starts.
+    args.push(match &ctx.loader {
+        Some(l) => l.main_class.clone(),
+        None => version_json.main_class.clone(),
+    });
 
     if modern {
         if let Some(arguments) = &version_json.arguments {
@@ -336,6 +379,10 @@ pub fn build_args(ctx: &LaunchContext, version_json: &VersionJson) -> Vec<String
         }
     } else if let Some(flat) = &version_json.minecraft_arguments {
         args.extend(flat.split_whitespace().map(str::to_string));
+    }
+
+    if let Some(l) = &ctx.loader {
+        args.extend(l.game_args.iter().cloned());
     }
 
     args.into_iter().map(|a| substitute(&a, &table)).collect()
@@ -376,7 +423,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn ctx() -> LaunchContext {
+    pub(super) fn ctx() -> LaunchContext {
         LaunchContext {
             common_dir: PathBuf::from("/data/common"),
             game_dir: PathBuf::from("/data/instances/Test"),
@@ -398,10 +445,11 @@ mod tests {
             res_height: 720,
             fullscreen: false,
             server_id: "Lunar_Test".into(),
+            loader: None,
         }
     }
 
-    fn version(id: &str, modern: bool) -> VersionJson {
+    pub(super) fn version(id: &str, modern: bool) -> VersionJson {
         let arguments = modern.then(|| {
             json!({
                 "jvm": ["-Djava.library.path=${natives_directory}", "-cp", "${classpath}"],
@@ -587,6 +635,7 @@ mod integration {
             res_height: 480,
             fullscreen: false,
             server_id: version.into(),
+            loader: None,
         };
 
         let exec = crate::java::java_exec_from_root(&jvm.path);
@@ -675,6 +724,7 @@ mod argdump {
             launcher_version: "2.2.1".into(),
             res_width: 854, res_height: 480, fullscreen: false,
             server_id: "1.20.1".into(),
+            loader: None,
         };
         let args = build_args(&ctx, &vj);
         for (i, a) in args.iter().enumerate() {
@@ -691,5 +741,65 @@ mod argdump {
             let missing: Vec<&&str> = entries.iter().filter(|e| !std::path::Path::new(e).exists()).collect();
             println!("MISSING from disk: {} {:?}", missing.len(), &missing[..missing.len().min(5)]);
         }
+    }
+}
+
+#[cfg(test)]
+mod loader_tests {
+    use super::tests::{ctx, version};
+    use super::*;
+    use crate::loader::{Library, LoaderProfile};
+
+    fn fabric() -> LoaderProfile {
+        LoaderProfile {
+            main_class: "net.fabricmc.loader.impl.launch.knot.KnotClient".into(),
+            libraries: vec![
+                Library { name: "net.fabricmc:fabric-loader:0.19.3".into(), repo_url: "https://m".into() },
+                Library { name: "org.ow2.asm:asm:9.6".into(), repo_url: "https://m".into() },
+            ],
+            game_args: vec!["--fabric".into()],
+            jvm_args: vec!["-Dfabric.test=1".into()],
+            min_java: Some(17),
+        }
+    }
+
+    #[test]
+    fn the_loader_replaces_the_entry_point() {
+        let mut c = ctx();
+        c.loader = Some(fabric());
+        let args = build_args(&c, &version("1.20.1", true));
+        assert!(args.contains(&"net.fabricmc.loader.impl.launch.knot.KnotClient".to_string()));
+        assert!(
+            !args.contains(&"net.minecraft.client.main.Main".to_string()),
+            "the vanilla main class must not also be passed"
+        );
+    }
+
+    #[test]
+    fn loader_libraries_precede_the_vanilla_jar() {
+        // The JVM takes a class from the earliest entry providing it, and a
+        // loader ships patched versions of vanilla classes.
+        let vj = version("1.20.1", true);
+        let cp = classpath_with_loader(Path::new("/data/common"), &vj, Some(&fabric()));
+        let loader_at = cp.iter().position(|p| p.to_string_lossy().contains("fabric-loader")).unwrap();
+        let jar_at = cp.iter().position(|p| p.to_string_lossy().ends_with("1.20.1.jar")).unwrap();
+        assert!(loader_at < jar_at, "loader must come first: {cp:?}");
+    }
+
+    #[test]
+    fn loader_arguments_are_appended_to_both_lists() {
+        let mut c = ctx();
+        c.loader = Some(fabric());
+        let args = build_args(&c, &version("1.20.1", true));
+        assert!(args.contains(&"-Dfabric.test=1".to_string()));
+        assert!(args.contains(&"--fabric".to_string()));
+    }
+
+    #[test]
+    fn a_vanilla_launch_is_unchanged_by_the_loader_path() {
+        let c = ctx();
+        let with = classpath_with_loader(Path::new("/data/common"), &version("1.20.1", true), None);
+        let without = classpath(Path::new("/data/common"), &version("1.20.1", true));
+        assert_eq!(with, without);
     }
 }

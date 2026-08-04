@@ -326,29 +326,40 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         .with(|c| c.selected_server.clone())?
         .ok_or_else(|| Error::Other("No server selected.".into()))?;
 
-    let (mc_version, java_supported, has_mod_loader) = {
+    let (mc_version, java_supported, declared_loader) = {
         let guard = state.distribution.lock().unwrap();
         let distro = guard.as_ref().ok_or(Error::NoDistribution)?;
         let server = distro
             .server_by_id(&server_id)
             .ok_or_else(|| Error::UnknownServer(server_id.clone()))?;
-        let modded = server.modules.iter().any(|m| {
-            matches!(
-                m.module_type,
-                ModuleType::Forge | ModuleType::ForgeHosted | ModuleType::Fabric | ModuleType::LiteLoader
-            )
+        // A loader module's id is a maven coordinate, so the version is its
+        // third segment. An absent version resolves to the newest release.
+        let declared = server.modules.iter().find_map(|m| {
+            let version = m.id.split(':').nth(2).unwrap_or("").to_string();
+            match m.module_type {
+                ModuleType::Fabric => Some(DeclaredLoader::Fabric(version)),
+                ModuleType::Forge | ModuleType::ForgeHosted | ModuleType::LiteLoader => {
+                    Some(DeclaredLoader::Forge)
+                }
+                _ => None,
+            }
         });
         (
             server.minecraft_version.clone(),
             server.effective_java_options().supported,
-            modded,
+            declared,
         )
     };
 
-    if has_mod_loader {
+    // Fabric resolves from metadata and is supported. Forge ships an
+    // installer that must run locally, so it is still refused — with a
+    // message that says why rather than pointing at a launcher that no longer
+    // exists.
+    if matches!(declared_loader, Some(DeclaredLoader::Forge)) {
         return Err(Error::Other(
-            "This server uses a mod loader (Forge/Fabric), which the Tauri build does not \
-             support yet. Use the Electron launcher for modded servers."
+            "This server uses Forge, which is not supported yet. Forge ships an installer \
+             that has to run on your machine — patching the game jar and running its \
+             processors — before the game can start. Fabric servers work today."
                 .into(),
         ));
     }
@@ -417,6 +428,46 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         .await?;
     }
 
+    // Resolve the loader and fetch its libraries. Done after the vanilla
+    // validation pass so a loader failure cannot leave a half-downloaded game.
+    let loader_profile = match &declared_loader {
+        Some(DeclaredLoader::Fabric(version)) => {
+            emit_progress(&app, "loader", "Resolving Fabric", 90.0);
+            let http = reqwest::Client::new();
+            let profile = crate::loader::resolve_fabric(&http, &mc_version, version).await?;
+
+            let lib_dir = crate::dl::library_dir(&common_dir);
+            let mut needed = Vec::new();
+            for lib in &profile.libraries {
+                let rel = lib.maven_path()?;
+                let path = crate::paths::safe_join(&lib_dir, &rel)?;
+                if !crate::dl::validate_local_file(&path, None).await {
+                    needed.push(crate::dl::Asset {
+                        id: lib.name.clone(),
+                        // Fabric's metadata carries no hashes, so these cannot
+                        // be checksum-validated the way Mojang's are. Recorded
+                        // rather than silently skipped.
+                        hash: String::new(),
+                        size: 0,
+                        url: lib.download_url()?,
+                        path,
+                    });
+                }
+            }
+            if !needed.is_empty() {
+                emit_progress(
+                    &app,
+                    "loader",
+                    &format!("Downloading {} Fabric libraries", needed.len()),
+                    91.0,
+                );
+                crate::dl::download_unverified(&needed, 8).await?;
+            }
+            Some(profile)
+        }
+        _ => None,
+    };
+
     emit_progress(&app, "java", "Locating a compatible Java runtime", 92.0);
     let jvm = match &java_config.executable {
         Some(exec) => crate::java::validate_jvm(exec, &java_supported).await?,
@@ -441,6 +492,7 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         res_height: res_h,
         fullscreen,
         server_id: server_id.clone(),
+        loader: loader_profile,
     };
 
     let exec = crate::java::java_exec_from_root(&jvm.path);
@@ -1476,4 +1528,13 @@ pub fn export_diagnostics(
     }
 
     Ok(r)
+}
+
+/// Which loader a server's distribution declares.
+#[derive(Debug, Clone, PartialEq)]
+enum DeclaredLoader {
+    /// Carries the pinned version; empty means newest.
+    Fabric(String),
+    /// Forge, ForgeHosted and LiteLoader all need the installer pipeline.
+    Forge,
 }
