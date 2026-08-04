@@ -29,6 +29,23 @@ body,
 #root {
     height: 100%;
     margin: 0;
+    /* The launcher is a fixed-size app window, never a scrolling document.
+       Panes that need to scroll say so themselves. Without this, any element
+       overshooting by a pixel produces a window-level scrollbar. */
+    overflow: hidden;
+}
+
+/* Lay the window out as frame + content rather than positioning the content
+   and subtracting a guessed frame height. The Windows titlebar renders taller
+   than the macOS one, so `calc(100% - 22px)` overflowed there by exactly the
+   difference and produced a scrollbar. */
+#root {
+    display: flex;
+    flex-direction: column;
+}
+
+#frameBar {
+    flex: none;
 }
 
 body {
@@ -39,10 +56,13 @@ body {
 }
 
 #main {
-    height: calc(100% - 22px);
+    flex: 1;
+    /* A flex item defaults to min-height:auto, which refuses to shrink below
+       its content and would reintroduce the overflow. */
+    min-height: 0;
     background: linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
     width: 100%;
-    position: absolute;
+    position: relative;
     z-index: 10;
 }
 
