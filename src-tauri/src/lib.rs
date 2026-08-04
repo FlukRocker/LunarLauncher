@@ -126,11 +126,15 @@ pub fn run() {
 /// launcher works fine without an update; it does not work at all if it cannot
 /// start.
 ///
-/// Gated on the updater being configured. While `active` is false, or the
-/// public key is empty, `builder().build()` fails and this logs once and stops
-/// — which is the current state, deliberately: see `tauri.conf.json`, where
-/// activating without a key would mean downloading and executing an update
-/// nobody verified.
+/// Gated on the updater being configured. `builder().build()` fails when the
+/// public key is empty, in which case this logs once and stops rather than
+/// retrying — an unverifiable update channel is worse than none, since it
+/// would mean downloading and executing code nobody signed.
+///
+/// The key is now populated, so the remaining requirement is a reachable
+/// endpoint publishing a signed `latest.json`. Until one exists the check
+/// fails per launch and is logged at debug, which is deliberately quiet: a
+/// user cannot act on it and it must never block startup.
 fn check_for_updates(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         use tauri_plugin_updater::UpdaterExt;

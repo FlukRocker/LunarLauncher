@@ -139,10 +139,20 @@ Left unset it targets Mojang's old host and fails with a message saying so.
    opposed to the vanilla Mojang assets, which are done.
 3. **JDK auto-download** — discovery works; fetching a JDK when none matches
    does not, so a suitable JDK must already be installed.
-4. **Auto-update** — `tauri-plugin-updater` is wired in and configured but left
-   inactive. It needs a signing keypair (`npm run tauri signer generate`), the
-   public key in `plugins.updater.pubkey`, and a `latest.json` manifest
-   published alongside releases.
+4. **Auto-update** — active, with the public key in `plugins.updater.pubkey`.
+   Two things remain before it works end to end:
+
+   - **An endpoint.** `plugins.updater.endpoints` still points at a
+     placeholder host. It must serve
+     `/updates/{{target}}/{{current_version}}`, returning 204 when current and
+     a signed manifest otherwise.
+   - **Signing in CI.** The private key lives outside the repo
+     (`~/.lunar-launcher-keys/lunarlauncher.key`) and is gitignored. Add it as
+     the `TAURI_SIGNING_PRIVATE_KEY` secret so release builds are signed.
+
+   Losing that private key means no future update can be signed, and every
+   installed launcher stops updating permanently. Back it up somewhere other
+   than this machine.
 5. **News feed and drop-in mod management.**
 6. **Visual parity** — the Electron stylesheet relied on ~50 `-webkit-` rules
    that only work in Chromium. Tauri renders in WKWebView / WebView2 /

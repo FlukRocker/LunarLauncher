@@ -45,10 +45,10 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "pubkey": "",
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCREVBQUY0RDhFRjkxN0YKUldSL2tlL1k5S3JlYS9xZ1k2S1ZhUjJ2Y1hreGd3WlQ1dHBxbm4wR2FlTVFOZWFCanlvSFdsWWYK",
       "endpoints": [
-        "https://REPLACE-WITH-CONTROLLER-HOST.invalid/updates/{{target}}/{{current_version}}"
+        "https://REPLACE-WITH-YOUR-HOST/updates/{{target}}/{{current_version}}"
       ]
     }
   }

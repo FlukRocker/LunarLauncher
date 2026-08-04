@@ -5,3 +5,9 @@ src-tauri/gen/
 /.vs/
 /.vscode/
 /logs/
+
+# Updater signing keys. The private key must never enter the repository —
+# anyone holding it can sign an update every installed launcher will trust
+# and execute. It lives outside the tree; CI signs from a secret.
+*.key
+*.key.pub
