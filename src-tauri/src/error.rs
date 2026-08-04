@@ -25,6 +25,12 @@ pub enum Error {
     #[error("no server with id {0}")]
     UnknownServer(String),
 
+    /// A distribution-supplied path that would write outside the directory it
+    /// belongs in. Separate from `Other` so the frontend and the logs can tell
+    /// a hostile index from an ordinary failure.
+    #[error("unsafe path in distribution: {0}")]
+    UnsafePath(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -38,6 +44,7 @@ impl Error {
             Error::ConfigNotLoaded => "ConfigNotLoaded",
             Error::NoDistribution => "NoDistribution",
             Error::UnknownServer(_) => "UnknownServer",
+            Error::UnsafePath(_) => "UnsafePath",
             Error::Other(_) => "Other",
         }
     }

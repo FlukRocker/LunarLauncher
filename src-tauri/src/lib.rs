@@ -104,6 +104,55 @@ pub fn run() {
             commands::get_telemetry,
             commands::save_telemetry,
         ])
+        .setup(|app| {
+            check_for_updates(app.handle().clone());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running lunarlauncher");
+}
+
+/// Check for an update once at startup, in the background.
+///
+/// Registering `tauri_plugin_updater` is not enough on its own — nothing called
+/// into it, so no shipped build could ever be fixed remotely and every bug in a
+/// release was permanent for that install.
+///
+/// This is spawned rather than awaited: a slow or unreachable update endpoint
+/// must not delay the window appearing, and a failure here is never fatal. The
+/// launcher works fine without an update; it does not work at all if it cannot
+/// start.
+///
+/// Gated on the updater being configured. While `active` is false, or the
+/// public key is empty, `builder().build()` fails and this logs once and stops
+/// — which is the current state, deliberately: see `tauri.conf.json`, where
+/// activating without a key would mean downloading and executing an update
+/// nobody verified.
+fn check_for_updates(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_updater::UpdaterExt;
+
+        let updater = match app.updater_builder().build() {
+            Ok(u) => u,
+            Err(err) => {
+                tracing::info!(%err, "Updater not configured; skipping the update check.");
+                return;
+            }
+        };
+
+        match updater.check().await {
+            Ok(Some(update)) => {
+                // Reported rather than installed. Silently replacing the binary
+                // under a user who is mid-session is a decision for the UI to
+                // offer, not for startup to take.
+                tracing::info!(
+                    version = %update.version,
+                    current = %update.current_version,
+                    "An update is available."
+                );
+            }
+            Ok(None) => tracing::info!("Launcher is up to date."),
+            Err(err) => tracing::warn!(%err, "Update check failed; continuing."),
+        }
+    });
 }

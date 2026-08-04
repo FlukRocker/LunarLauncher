@@ -105,9 +105,25 @@ export interface Server {
     modules: DistroModule[]
 }
 
+/**
+ * Outbound links for the landing page's social row.
+ *
+ * A local extension to the Helios spec. Every field is optional and so is the
+ * whole object — an index that omits it is the normal case, and an absent field
+ * means "hide that icon", never "render a dead one".
+ */
+export interface SocialLinks {
+    website?: string | null
+    discord?: string | null
+    x?: string | null
+    instagram?: string | null
+    youtube?: string | null
+}
+
 export interface Distribution {
     version: string
     rss?: string | null
+    links?: SocialLinks | null
     servers: Server[]
 }
 
@@ -251,7 +267,18 @@ export interface OptionalMod {
     name: string
     /** Required mods are shown but cannot be turned off. */
     required: boolean
+    /**
+     * Effective state — this mod's own preference AND every ancestor being on.
+     * A mod nested under a switched-off parent reports `false` here even when
+     * its own stored preference is on.
+     */
     enabled: boolean
+    /**
+     * Nearest toggleable ancestor's id, or absent at the top level. Present so
+     * the list can be rendered nested; the backend has already applied the
+     * parent gating to `enabled`.
+     */
+    parent?: string | null
 }
 
 export interface DropinMod {

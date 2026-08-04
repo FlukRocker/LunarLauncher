@@ -60,7 +60,14 @@ pub fn classpath(common_dir: &Path, version_json: &VersionJson) -> Vec<PathBuf> 
         }
         if let Some(artifact) = &lib.downloads.artifact {
             if let Some(rel) = &artifact.path {
-                out.push(lib_dir.join(rel));
+                // Must agree with dl.rs: a library skipped there as unsafe has
+                // not been downloaded, so it must not reach the classpath here.
+                match crate::paths::safe_join(&lib_dir, rel) {
+                    Ok(p) => out.push(p),
+                    Err(err) => {
+                        tracing::warn!(%err, library = %lib.name, "Omitting library with an unsafe path from the classpath.");
+                    }
+                }
             }
         }
     }

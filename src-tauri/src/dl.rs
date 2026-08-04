@@ -423,7 +423,17 @@ impl MojangIndexProcessor {
             let Some(artifact) = artifact else { continue };
             let Some(rel) = &artifact.path else { continue };
 
-            let path = lib_dir.join(rel);
+            // These come from Mojang's version JSON and are relative, so this
+            // is defence in depth rather than a live fix — but it is the same
+            // join shape the module-download path will need, and a bad entry
+            // should cost one library rather than a write outside common/.
+            let path = match crate::paths::safe_join(&lib_dir, rel) {
+                Ok(p) => p,
+                Err(err) => {
+                    tracing::warn!(%err, library = %lib.name, "Skipping library with an unsafe path.");
+                    continue;
+                }
+            };
             if !validate_local_file(&path, Some(&artifact.sha1)).await {
                 out.push(Asset {
                     id: lib.name.clone(),

@@ -793,7 +793,91 @@ pub struct OptionalMod {
     pub id: String,
     pub name: String,
     pub required: bool,
+    /// The *effective* state: this module's own preference AND every ancestor
+    /// being on. A download path must read this rather than recomputing from
+    /// the saved preference, or it will install children of a disabled parent.
+    ///
+    /// A required child under a switched-off optional parent therefore reports
+    /// `required: true, enabled: false` — it is required *within its group*,
+    /// and the group is off.
     pub enabled: bool,
+    /// Nearest toggleable ancestor, or `None` at the top level. Non-mod parents
+    /// (a loader carrying its libraries, say) are not listed and so are never
+    /// named here, but they still gate their children.
+    pub parent: Option<String>,
+}
+
+/// How deep `subModules` nesting is followed before giving up.
+///
+/// The distribution is untrusted network input, so the walk is bounded rather
+/// than trusting the document to terminate.
+const MAX_MODULE_DEPTH: usize = 16;
+
+/// Walk a module tree, collecting the mods the user can toggle.
+///
+/// The spec models an optional mod group as a parent module with children in
+/// `subModules` — the reference sample nests config files under `dynsurround`
+/// and a `LiteMod` under `liteloader`. Before this walked recursively, a child
+/// mod never appeared in the toggle list at all.
+///
+/// `parent_enabled` gates the whole subtree: a child is only on when its parent
+/// is, which is the entire point of nesting. A child's own saved preference is
+/// kept in config regardless, so switching a parent back on restores whatever
+/// the user had chosen underneath it.
+fn collect_distribution_mods(
+    modules: &[crate::distribution::Module],
+    saved: &std::collections::HashMap<String, bool>,
+    parent: Option<&str>,
+    parent_enabled: bool,
+    depth: usize,
+    out: &mut Vec<OptionalMod>,
+) {
+    use crate::distribution::ModuleType;
+
+    if depth >= MAX_MODULE_DEPTH {
+        tracing::warn!(
+            depth,
+            "subModules nested deeper than {MAX_MODULE_DEPTH}; ignoring the rest of this branch."
+        );
+        return;
+    }
+
+    for m in modules {
+        let is_mod = matches!(
+            m.module_type,
+            ModuleType::ForgeMod | ModuleType::LiteMod | ModuleType::FabricMod
+        );
+        let required = m.required.as_ref().map(|r| r.value()).unwrap_or(true);
+        let default_on = m.required.as_ref().map(|r| r.default_on()).unwrap_or(true);
+
+        let own_on = if required {
+            true
+        } else {
+            saved.get(&m.id).copied().unwrap_or(default_on)
+        };
+        let effective = parent_enabled && own_on;
+
+        if is_mod {
+            out.push(OptionalMod {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                required,
+                enabled: effective,
+                parent: parent.map(str::to_string),
+            });
+        }
+
+        if !m.sub_modules.is_empty() {
+            // Only a toggleable module becomes the reported parent; a Library or
+            // loader passes its own gate straight through to its children.
+            let (child_parent, gate) = if is_mod {
+                (Some(m.id.as_str()), effective)
+            } else {
+                (parent, parent_enabled)
+            };
+            collect_distribution_mods(&m.sub_modules, saved, child_parent, gate, depth + 1, out);
+        }
+    }
 }
 
 fn instance_dir_for(state: &AppState, server_id: &str) -> Result<std::path::PathBuf> {
@@ -811,8 +895,6 @@ pub fn get_distribution_mods(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<OptionalMod>> {
-    use crate::distribution::ModuleType;
-
     let guard = state.distribution.lock().unwrap();
     let distro = guard.as_ref().ok_or(Error::NoDistribution)?;
     let server = distro
@@ -832,30 +914,9 @@ pub fn get_distribution_mods(
             .unwrap_or_default()
     })?;
 
-    Ok(server
-        .modules
-        .iter()
-        .filter(|m| {
-            matches!(
-                m.module_type,
-                ModuleType::ForgeMod | ModuleType::LiteMod | ModuleType::FabricMod
-            )
-        })
-        .map(|m| {
-            let required = m.required.as_ref().map(|r| r.value()).unwrap_or(true);
-            let default_on = m.required.as_ref().map(|r| r.default_on()).unwrap_or(true);
-            OptionalMod {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                required,
-                enabled: if required {
-                    true
-                } else {
-                    saved.get(&m.id).copied().unwrap_or(default_on)
-                },
-            }
-        })
-        .collect())
+    let mut out = Vec::new();
+    collect_distribution_mods(&server.modules, &saved, None, true, 0, &mut out);
+    Ok(out)
 }
 
 /// Persist an optional module's on/off state for a server.
@@ -1165,4 +1226,139 @@ pub fn save_telemetry(
 ) -> Result<()> {
     state.config.with_mut(|c| c.settings.telemetry = telemetry)?;
     state.config.save()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::distribution::{Artifact, Module, ModuleType, RequiredSpec};
+    use std::collections::HashMap;
+
+    fn module(id: &str, ty: ModuleType, required: Option<(bool, bool)>) -> Module {
+        Module {
+            id: id.into(),
+            name: id.into(),
+            module_type: ty,
+            classpath: None,
+            required: required.map(|(value, def)| RequiredSpec {
+                value: Some(value),
+                def: Some(def),
+            }),
+            artifact: Artifact {
+                size: 1,
+                md5: None,
+                url: "https://example.com/a.jar".into(),
+                path: None,
+            },
+            sub_modules: Vec::new(),
+        }
+    }
+
+    fn collect(modules: &[Module], saved: &HashMap<String, bool>) -> Vec<OptionalMod> {
+        let mut out = Vec::new();
+        collect_distribution_mods(modules, saved, None, true, 0, &mut out);
+        out
+    }
+
+    #[test]
+    fn nested_mods_are_listed_not_dropped() {
+        // The regression: the walk used to be flat, so a child mod authored
+        // under a parent never reached the toggle list at all.
+        let mut parent = module("parent", ModuleType::ForgeMod, Some((false, true)));
+        parent.sub_modules = vec![module("child", ModuleType::LiteMod, Some((false, true)))];
+
+        let got = collect(&[parent], &HashMap::new());
+
+        let ids: Vec<_> = got.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["parent", "child"]);
+        assert_eq!(got[1].parent.as_deref(), Some("parent"));
+    }
+
+    #[test]
+    fn a_child_is_off_when_its_parent_is_off() {
+        // The point of nesting: turning a group off must take its children with
+        // it, even though the child's own saved preference says on.
+        let mut parent = module("parent", ModuleType::ForgeMod, Some((false, true)));
+        parent.sub_modules = vec![module("child", ModuleType::ForgeMod, Some((false, true)))];
+
+        let saved = HashMap::from([("parent".to_string(), false), ("child".to_string(), true)]);
+        let got = collect(&[parent], &saved);
+
+        assert!(!got[0].enabled, "parent was switched off");
+        assert!(!got[1].enabled, "child must follow its parent off");
+    }
+
+    #[test]
+    fn a_childs_preference_survives_the_parent_going_off_and_on() {
+        let mut parent = module("parent", ModuleType::ForgeMod, Some((false, true)));
+        parent.sub_modules = vec![module("child", ModuleType::ForgeMod, Some((false, true)))];
+
+        // Child explicitly off, parent on: only the child is off.
+        let saved = HashMap::from([("parent".to_string(), true), ("child".to_string(), false)]);
+        let got = collect(&[parent.clone()], &saved);
+        assert!(got[0].enabled);
+        assert!(!got[1].enabled);
+
+        // Parent off, then back on — the child's stored preference still rules.
+        let off = HashMap::from([("parent".to_string(), false), ("child".to_string(), true)]);
+        assert!(!collect(&[parent.clone()], &off)[1].enabled);
+        let on = HashMap::from([("parent".to_string(), true), ("child".to_string(), true)]);
+        assert!(collect(&[parent], &on)[1].enabled);
+    }
+
+    #[test]
+    fn a_required_child_under_a_disabled_parent_is_still_off() {
+        let mut parent = module("parent", ModuleType::ForgeMod, Some((false, true)));
+        parent.sub_modules = vec![module("child", ModuleType::ForgeMod, None)]; // required
+
+        let saved = HashMap::from([("parent".to_string(), false)]);
+        let got = collect(&[parent], &saved);
+
+        assert!(got[1].required, "the child is required within its group");
+        assert!(!got[1].enabled, "but the group is switched off");
+    }
+
+    #[test]
+    fn non_mod_parents_gate_children_without_being_listed() {
+        // A loader carrying mods beneath it: the loader itself has no toggle,
+        // so it must not appear, but its children still must.
+        let mut loader = module("loader", ModuleType::Forge, None);
+        loader.sub_modules = vec![
+            module("lib", ModuleType::Library, None),
+            module("bundled", ModuleType::ForgeMod, Some((false, true))),
+        ];
+
+        let got = collect(&[loader], &HashMap::new());
+
+        let ids: Vec<_> = got.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["bundled"], "only the mod is toggleable");
+        assert_eq!(
+            got[0].parent, None,
+            "a non-toggleable ancestor is not reported as the parent"
+        );
+        assert!(got[0].enabled);
+    }
+
+    #[test]
+    fn unknown_module_types_are_never_listed_as_mods() {
+        let got = collect(&[module("mystery", ModuleType::Unknown, None)], &HashMap::new());
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn nesting_deeper_than_the_cap_is_ignored_rather_than_overflowing() {
+        // The distribution is untrusted input; a pathological document must not
+        // take the process out.
+        let mut root = module("d0", ModuleType::ForgeMod, None);
+        {
+            let mut cursor = &mut root;
+            for i in 1..(MAX_MODULE_DEPTH + 8) {
+                cursor.sub_modules = vec![module(&format!("d{i}"), ModuleType::ForgeMod, None)];
+                cursor = &mut cursor.sub_modules[0];
+            }
+        }
+
+        let got = collect(&[root], &HashMap::new());
+        assert_eq!(got.len(), MAX_MODULE_DEPTH, "walk stops at the cap");
+    }
 }

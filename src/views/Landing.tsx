@@ -11,7 +11,8 @@ import {
     type LaunchProgress,
     type Article,
     type Server,
-    type ServerStatus
+    type ServerStatus,
+    type SocialLinks
 } from '../lib/api'
 
 import logo from '../assets/images/LunarLogo.png'
@@ -47,6 +48,7 @@ export function Landing({
     const [article, setArticle] = useState(0)
     const [newsOpen, setNewsOpen] = useState(false)
     const [playing, setPlaying] = useState(false)
+    const [links, setLinks] = useState<SocialLinks | null>(null)
 
     useEffect(() => {
         api.getSelectedServer()
@@ -62,6 +64,15 @@ export function Landing({
         // The feed is optional; a distribution without an rss field simply
         // leaves the news button disabled.
         newsApi.getNews().then(setNews).catch(() => setNews([]))
+    }, [])
+
+    useEffect(() => {
+        // Social links are optional, like rss. Absent means the icon is not
+        // rendered — an <a> with no href looks clickable, does nothing, and is
+        // not keyboard-focusable, which is worse than showing nothing at all.
+        api.getDistribution()
+            .then((d) => setLinks(d.links ?? null))
+            .catch(() => setLinks(null))
     }, [])
 
     // News is a view within the landing view, so it needs its own flag for the
@@ -120,6 +131,23 @@ export function Landing({
     const detailsText = error ?? progress?.detail ?? ''
     const percent = progress?.percent ?? 0
 
+    // Only icons with a real destination. The ids and order match the Electron
+    // `landing.ejs`, because launcher.css and app.css both style them by id.
+    //
+    // Nothing supplies these yet, so today this is empty and the whole row —
+    // divider included — is omitted. That is the intended interim state: five
+    // icons that look clickable and do nothing read as a broken launcher, and
+    // an <a> without an href cannot be reached by keyboard either.
+    const externalMedia = (
+        [
+            { id: 'linkURL', icon: linkIcon, label: 'Website', url: links?.website },
+            { id: 'xURL', icon: xIcon, label: 'X', url: links?.x },
+            { id: 'instagramURL', icon: instagramIcon, label: 'Instagram', url: links?.instagram },
+            { id: 'youtubeURL', icon: youtubeIcon, label: 'YouTube', url: links?.youtube },
+            { id: 'discordURL', icon: discordIcon, label: 'Discord', url: links?.discord }
+        ] as const
+    ).flatMap((m) => (m.url ? [{ ...m, url: m.url }] : []))
+
     return (
         <div id="landingContainer">
             <div id="upper">
@@ -162,22 +190,27 @@ export function Landing({
                                     </button>
                                 </div>
                             </div>
-                            <div className="mediaDivider" />
-                            <div id="externalMedia">
-                                {[
-                                    { id: 'linkURL', icon: linkIcon, label: 'Website' },
-                                    { id: 'xURL', icon: xIcon, label: 'X' },
-                                    { id: 'instagramURL', icon: instagramIcon, label: 'Instagram' },
-                                    { id: 'youtubeURL', icon: youtubeIcon, label: 'YouTube' },
-                                    { id: 'discordURL', icon: discordIcon, label: 'Discord' }
-                                ].map((m) => (
-                                    <div className="mediaContainer" key={m.id}>
-                                        <a className="mediaURL" id={m.id} aria-label={m.label}>
-                                            <img className="mediaSVG" src={m.icon} alt="" />
-                                        </a>
+                            {externalMedia.length > 0 && (
+                                <>
+                                    <div className="mediaDivider" />
+                                    <div id="externalMedia">
+                                        {externalMedia.map((m) => (
+                                            <div className="mediaContainer" key={m.id}>
+                                                <a
+                                                    className="mediaURL"
+                                                    id={m.id}
+                                                    href={m.url}
+                                                    target="_blank"
+                                                    rel="noreferrer noopener"
+                                                    aria-label={m.label}
+                                                >
+                                                    <img className="mediaSVG" src={m.icon} alt="" />
+                                                </a>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

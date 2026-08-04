@@ -82,6 +82,25 @@ pub enum ModuleType {
     LiteMod,
     File,
     VersionManifest,
+    /// Any `type` this build does not recognise.
+    ///
+    /// Without this, one unknown string anywhere in the document fails
+    /// deserialisation of the *entire* index — every server and every mod —
+    /// because the document is parsed in a single `from_str`. An existing
+    /// install would then serve its stale cache silently and a fresh install
+    /// would show the fatal "Unable to Load Distribution Index" screen, with no
+    /// way to recover while the updater is inactive.
+    ///
+    /// Degrading to "ignored module" instead means a future spec addition costs
+    /// one unusable module rather than the whole launcher. Unknown is matched by
+    /// nothing, so it is never treated as a mod, a loader, or a download target.
+    ///
+    /// Note this is deliberately not `Unknown(String)`: the enum is `Copy`, and
+    /// carrying the original tag would force every `matches!(m.module_type, ..)`
+    /// site to borrow instead. The raw text is still available in the cached
+    /// body, which is stored verbatim rather than re-serialised.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,6 +228,35 @@ pub struct DiscordMeta {
     pub small_image_key: String,
 }
 
+/// Outbound links for the landing page's social row.
+///
+/// A local extension to the Helios spec, not part of upstream. Every field is
+/// optional and the whole object is optional, so an index that omits it — which
+/// is every index that exists today — parses exactly as before, and a launcher
+/// that predates this ignores the object entirely (nothing here sets
+/// `deny_unknown_fields`).
+///
+/// This exists because `DiscordMeta` is Rich Presence config — a client id and
+/// image keys — not a link, so before this there was nowhere in the document to
+/// put a Discord invite or a website. The five icons on the landing page were
+/// rendered with no `href` at all as a result.
+///
+/// An absent field means "hide that icon", never "render a dead one".
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SocialLinks {
+    #[serde(default)]
+    pub website: Option<String>,
+    #[serde(default)]
+    pub discord: Option<String>,
+    #[serde(default)]
+    pub x: Option<String>,
+    #[serde(default)]
+    pub instagram: Option<String>,
+    #[serde(default)]
+    pub youtube: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Distribution {
     pub version: String,
@@ -216,6 +264,9 @@ pub struct Distribution {
     pub discord: Option<DiscordMeta>,
     #[serde(default)]
     pub rss: Option<String>,
+    /// See `SocialLinks` — a local addition, absent from every upstream index.
+    #[serde(default)]
+    pub links: Option<SocialLinks>,
     #[serde(default)]
     pub servers: Vec<Server>,
 }
@@ -599,6 +650,7 @@ mod tests {
             version: "1.0.0".into(),
             discord: None,
             rss: None,
+            links: None,
             servers: vec![a, b],
         };
         assert_eq!(d.main_server().unwrap().id, "a");
@@ -613,5 +665,126 @@ mod tests {
         assert!(!d.servers.is_empty());
         let main = d.main_server().unwrap();
         assert!(!main.modules.is_empty());
+    }
+
+    #[test]
+    fn known_module_types_still_round_trip() {
+        // The fallback must not swallow the tags we actually support.
+        for (tag, expected) in [
+            ("Library", ModuleType::Library),
+            ("ForgeHosted", ModuleType::ForgeHosted),
+            ("Forge", ModuleType::Forge),
+            ("Fabric", ModuleType::Fabric),
+            ("LiteLoader", ModuleType::LiteLoader),
+            ("ForgeMod", ModuleType::ForgeMod),
+            ("FabricMod", ModuleType::FabricMod),
+            ("LiteMod", ModuleType::LiteMod),
+            ("File", ModuleType::File),
+            ("VersionManifest", ModuleType::VersionManifest),
+        ] {
+            let got: ModuleType =
+                serde_json::from_str(&format!("\"{tag}\"")).expect("known tag must parse");
+            assert_eq!(got, expected, "{tag} deserialised to the wrong variant");
+        }
+    }
+
+    #[test]
+    fn unknown_module_type_degrades_instead_of_failing() {
+        let got: ModuleType = serde_json::from_str("\"NeoForgeMod\"")
+            .expect("an unrecognised type must not fail deserialisation");
+        assert_eq!(got, ModuleType::Unknown);
+    }
+
+    #[test]
+    fn one_unknown_module_does_not_destroy_the_whole_index() {
+        // The regression this guards: the document is parsed in a single
+        // from_str, so before the Unknown fallback existed a single unrecognised
+        // type anywhere took out every server and every mod in the index.
+        let raw = r#"{
+            "version": "1.0.0",
+            "servers": [{
+                "id": "Test",
+                "name": "Test",
+                "description": "",
+                "icon": "",
+                "version": "1.0.0",
+                "address": "mc.example.com:25565",
+                "minecraftVersion": "1.21.1",
+                "mainServer": true,
+                "autoconnect": true,
+                "modules": [
+                    {
+                        "id": "com.example:known:1.0",
+                        "name": "Known",
+                        "type": "ForgeMod",
+                        "artifact": { "size": 1, "url": "https://example.com/a.jar" }
+                    },
+                    {
+                        "id": "com.example:future:1.0",
+                        "name": "From a newer spec",
+                        "type": "SomeTypeThisBuildHasNeverHeardOf",
+                        "artifact": { "size": 1, "url": "https://example.com/b.jar" }
+                    }
+                ]
+            }]
+        }"#;
+
+        let d: Distribution =
+            serde_json::from_str(raw).expect("index must survive an unknown module type");
+
+        let server = d.main_server().expect("server must still be present");
+        assert_eq!(server.modules.len(), 2, "both modules should still be held");
+        assert_eq!(server.modules[0].module_type, ModuleType::ForgeMod);
+        assert_eq!(server.modules[1].module_type, ModuleType::Unknown);
+    }
+}
+
+#[cfg(test)]
+mod social_links_tests {
+    use super::*;
+
+    #[test]
+    fn an_index_without_links_still_parses() {
+        // Every index in the field today omits this. It must stay optional.
+        let raw = r#"{ "version": "1.0.0", "servers": [] }"#;
+        let d: Distribution = serde_json::from_str(raw).expect("links must be optional");
+        assert!(d.links.is_none());
+    }
+
+    #[test]
+    fn a_partial_links_object_leaves_the_rest_absent() {
+        // The controller can only supply two of the five today, so a partial
+        // object is the normal case, not an edge case.
+        let raw = r#"{
+            "version": "1.0.0",
+            "links": {
+                "website": "https://example.com",
+                "discord": "https://discord.gg/example"
+            },
+            "servers": []
+        }"#;
+        let d: Distribution = serde_json::from_str(raw).unwrap();
+        let links = d.links.expect("links present");
+        assert_eq!(links.website.as_deref(), Some("https://example.com"));
+        assert_eq!(links.discord.as_deref(), Some("https://discord.gg/example"));
+        assert!(links.x.is_none(), "unsupplied links stay absent, not empty");
+        assert!(links.instagram.is_none());
+        assert!(links.youtube.is_none());
+    }
+
+    #[test]
+    fn links_are_camel_case_on_the_wire() {
+        let d = Distribution {
+            version: "1.0.0".into(),
+            discord: None,
+            rss: None,
+            links: Some(SocialLinks {
+                website: Some("https://example.com".into()),
+                ..Default::default()
+            }),
+            servers: Vec::new(),
+        };
+        let v = serde_json::to_value(&d).unwrap();
+        assert_eq!(v["links"]["website"], "https://example.com");
     }
 }
