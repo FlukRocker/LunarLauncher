@@ -11,11 +11,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-/// Azure application id. Carried over from `ipcconstants.js`.
+/// Azure application id for this launcher.
+///
+/// Public by design — a native app has nowhere to keep a secret, so this ships
+/// in the binary and is not sensitive. What protects the flow is the redirect
+/// URI allow-list on the registration, which is why both URIs below must be
+/// registered there or Microsoft rejects the request before showing a login
+/// page.
 ///
 /// Third parties forking this launcher must register their own; see
 /// docs/MicrosoftAuth.md.
-pub const AZURE_CLIENT_ID: &str = "1ce6e35a-126f-48fd-97fb-54d143ac6d45";
+pub const AZURE_CLIENT_ID: &str = "9a6ec02d-485d-4be9-b7f1-454a56b546ad";
 
 pub const REDIRECT_URI: &str =
     "https://login.microsoftonline.com/common/oauth2/nativeclient";
@@ -449,9 +455,15 @@ Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
 ///
 /// Returns the bound redirect URI and a future that resolves with the code.
 pub async fn start_loopback() -> Result<(String, tokio::net::TcpListener)> {
+    // Bind the loopback address, but advertise the redirect as `localhost`.
+    //
+    // Azure treats 127.0.0.1 and localhost as different hosts, and only
+    // localhost gets the rule that any port matches a registered
+    // `http://localhost`. Sending 127.0.0.1 fails redirect-URI validation even
+    // when the registration looks correct.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    Ok((format!("http://127.0.0.1:{port}"), listener))
+    Ok((format!("http://localhost:{port}"), listener))
 }
 
 /// Accept exactly one request and pull the `code` (or `error`) from it.
@@ -491,7 +503,8 @@ mod loopback_tests {
     #[tokio::test]
     async fn loopback_binds_an_ephemeral_port() {
         let (uri, listener) = start_loopback().await.unwrap();
-        assert!(uri.starts_with("http://127.0.0.1:"));
+        // Advertised as localhost: Azure only allows arbitrary ports there.
+        assert!(uri.starts_with("http://localhost:"), "got {uri}");
         let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
         assert!(port > 0);
         drop(listener);
@@ -532,7 +545,15 @@ mod loopback_tests {
 
     #[test]
     fn authorize_url_encodes_the_loopback_redirect() {
-        let u = authorize_url_for("http://127.0.0.1:51234");
-        assert!(u.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A51234"));
+        let u = authorize_url_for("http://localhost:51234");
+        assert!(u.contains("redirect_uri=http%3A%2F%2Flocalhost%3A51234"));
+    }
+
+    #[test]
+    fn the_shipped_client_id_is_ours() {
+        // Guards against the Helios id creeping back: that registration has no
+        // localhost redirect, so the browser flow would fail against it.
+        assert_ne!(AZURE_CLIENT_ID, "1ce6e35a-126f-48fd-97fb-54d143ac6d45");
+        assert_eq!(AZURE_CLIENT_ID.len(), 36, "must be a full uuid");
     }
 }
