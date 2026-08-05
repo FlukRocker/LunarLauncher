@@ -453,48 +453,121 @@ Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
 /// comes back to a short-lived local listener rather than being scraped out
 /// of an embedded webview.
 ///
-/// Returns the bound redirect URI and a future that resolves with the code.
-pub async fn start_loopback() -> Result<(String, tokio::net::TcpListener)> {
+/// Returns the advertised redirect URI and the sockets to wait on.
+pub struct Loopback {
+    /// What Azure is told to redirect to.
+    pub redirect_uri: String,
+    /// One per address family. See `start_loopback`.
+    pub listeners: Vec<tokio::net::TcpListener>,
+}
+
+pub async fn start_loopback() -> Result<Loopback> {
     // Bind the loopback address, but advertise the redirect as `localhost`.
     //
     // Azure treats 127.0.0.1 and localhost as different hosts, and only
     // localhost gets the rule that any port matches a registered
     // `http://localhost`. Sending 127.0.0.1 fails redirect-URI validation even
     // when the registration looks correct.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port();
-    Ok((format!("http://localhost:{port}"), listener))
+    let v4 = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = v4.local_addr()?.port();
+    let mut listeners = vec![v4];
+
+    // ...which means the browser resolves `localhost` itself, and on Windows
+    // that answers ::1 before 127.0.0.1. Listening only on IPv4 there gets the
+    // redirect refused at the TCP level — no request, no error page, just
+    // ERR_CONNECTION_REFUSED on a URL that looks perfectly correct.
+    //
+    // Binding `::` dual-stack instead would be tidier, but IPV6_V6ONLY
+    // defaults differ per platform, so the explicit second socket is the
+    // portable form. Failure is not fatal: a host with IPv6 disabled resolves
+    // localhost to 127.0.0.1 and the first listener serves it.
+    match tokio::net::TcpListener::bind(("::1", port)).await {
+        Ok(v6) => listeners.push(v6),
+        Err(err) => tracing::warn!(%err, port, "no IPv6 loopback; IPv4 only"),
+    }
+
+    Ok(Loopback { redirect_uri: format!("http://localhost:{port}"), listeners })
 }
 
-/// Accept exactly one request and pull the `code` (or `error`) from it.
-pub async fn await_loopback_code(listener: tokio::net::TcpListener) -> Result<String> {
+/// Wait for the redirect and pull the `code` (or `error`) out of it.
+///
+/// Requests that carry neither are answered and ignored rather than ending the
+/// wait. Browsers open speculative connections and fetch `/favicon.ico`, and
+/// treating the first connection as the answer meant one of those could
+/// consume the whole flow — leaving the real redirect refused, which looks
+/// identical to never having listened at all.
+pub async fn await_loopback_code(loopback: Loopback) -> Result<String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let (mut sock, _) = listener.accept().await?;
-    let mut buf = vec![0u8; 8192];
-    let n = sock.read(&mut buf).await?;
-    let req = String::from_utf8_lossy(&buf[..n]);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    for listener in loopback.listeners {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((sock, _)) => {
+                        if tx.send(sock).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(%err, "loopback accept failed");
+                        return;
+                    }
+                }
+            }
+        });
+    }
+    drop(tx);
 
-    // First line: "GET /?code=... HTTP/1.1"
-    let target = req
-        .lines()
-        .next()
-        .and_then(|l| l.split_whitespace().nth(1))
-        .unwrap_or("/");
-    let full = format!("http://127.0.0.1{target}");
+    while let Some(mut sock) = rx.recv().await {
+        let mut buf = vec![0u8; 8192];
+        let n = match sock.read(&mut buf).await {
+            Ok(0) => continue,
+            Ok(n) => n,
+            Err(err) => {
+                tracing::warn!(%err, "loopback read failed");
+                continue;
+            }
+        };
+        let req = String::from_utf8_lossy(&buf[..n]);
 
-    let outcome = match extract_code_from_redirect(&full) {
-        Some(code) => Ok(code),
-        None => Err(extract_error_from_redirect(&full)
-            .unwrap_or_else(|| "No authorization code was returned.".into())),
-    };
+        // First line: "GET /?code=... HTTP/1.1"
+        let target = req
+            .lines()
+            .next()
+            .and_then(|l| l.split_whitespace().nth(1))
+            .unwrap_or("/");
+        let full = format!("http://127.0.0.1{target}");
 
-    let page = if outcome.is_ok() { DONE_PAGE } else { FAIL_PAGE };
-    let _ = sock.write_all(http_response(page).as_bytes()).await;
-    let _ = sock.flush().await;
+        let outcome = match extract_code_from_redirect(&full) {
+            Some(code) => Ok(code),
+            None => match extract_error_from_redirect(&full) {
+                Some(err) => Err(err),
+                // Neither: not the redirect. Answer so the browser is not left
+                // hanging, and keep waiting for the one that matters.
+                None => {
+                    let _ = sock.write_all(NOT_THE_REDIRECT.as_bytes()).await;
+                    let _ = sock.flush().await;
+                    continue;
+                }
+            },
+        };
 
-    outcome.map_err(Error::Other)
+        let page = if outcome.is_ok() { DONE_PAGE } else { FAIL_PAGE };
+        let _ = sock.write_all(http_response(page).as_bytes()).await;
+        let _ = sock.flush().await;
+
+        return outcome.map_err(Error::Other);
+    }
+
+    Err(Error::Other(
+        "The sign-in listener stopped before the browser came back.".into(),
+    ))
 }
+
+const NOT_THE_REDIRECT: &str =
+    "HTTP/1.1 204 No Content\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
 
 #[cfg(test)]
 mod loopback_tests {
@@ -502,20 +575,20 @@ mod loopback_tests {
 
     #[tokio::test]
     async fn loopback_binds_an_ephemeral_port() {
-        let (uri, listener) = start_loopback().await.unwrap();
+        let lb = start_loopback().await.unwrap();
+        let uri = &lb.redirect_uri;
         // Advertised as localhost: Azure only allows arbitrary ports there.
         assert!(uri.starts_with("http://localhost:"), "got {uri}");
         let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
         assert!(port > 0);
-        drop(listener);
     }
 
     #[tokio::test]
     async fn loopback_captures_the_code_from_a_real_request() {
-        let (uri, listener) = start_loopback().await.unwrap();
-        let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
+        let lb = start_loopback().await.unwrap();
+        let port: u16 = lb.redirect_uri.rsplit(':').next().unwrap().parse().unwrap();
 
-        let task = tokio::spawn(await_loopback_code(listener));
+        let task = tokio::spawn(await_loopback_code(lb));
 
         // Pretend to be the browser following the redirect.
         use tokio::io::AsyncWriteExt;
@@ -529,9 +602,9 @@ mod loopback_tests {
 
     #[tokio::test]
     async fn loopback_surfaces_a_denied_consent() {
-        let (uri, listener) = start_loopback().await.unwrap();
-        let port: u16 = uri.rsplit(':').next().unwrap().parse().unwrap();
-        let task = tokio::spawn(await_loopback_code(listener));
+        let lb = start_loopback().await.unwrap();
+        let port: u16 = lb.redirect_uri.rsplit(':').next().unwrap().parse().unwrap();
+        let task = tokio::spawn(await_loopback_code(lb));
 
         use tokio::io::AsyncWriteExt;
         let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
@@ -555,5 +628,74 @@ mod loopback_tests {
         // localhost redirect, so the browser flow would fail against it.
         assert_ne!(AZURE_CLIENT_ID, "1ce6e35a-126f-48fd-97fb-54d143ac6d45");
         assert_eq!(AZURE_CLIENT_ID.len(), 36, "must be a full uuid");
+    }
+}
+
+#[cfg(test)]
+mod loopback_family_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// The bug this pairs with: the listener bound 127.0.0.1 but advertised
+    /// `localhost`, and Windows resolves `localhost` to ::1 first. The
+    /// redirect was refused at the TCP level — no request reached the
+    /// launcher, so it presented as a browser error on a correct-looking URL.
+    #[tokio::test]
+    async fn the_advertised_host_is_reachable_over_ipv6() {
+        let lb = start_loopback().await.unwrap();
+        let port: u16 = lb.redirect_uri.rsplit(':').next().unwrap().parse().unwrap();
+
+        // Skip where the host genuinely has no IPv6 loopback; there the
+        // resolver returns 127.0.0.1 and the IPv4 listener serves it.
+        if lb.listeners.len() < 2 {
+            return;
+        }
+
+        let task = tokio::spawn(await_loopback_code(lb));
+        let mut c = tokio::net::TcpStream::connect(("::1", port)).await
+            .expect("nothing listening on ::1 — Windows would refuse the redirect");
+        c.write_all(b"GET /?code=abc123 HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut resp = String::new();
+        let _ = c.read_to_string(&mut resp).await;
+        assert_eq!(task.await.unwrap().unwrap(), "abc123");
+    }
+
+    /// The second half: `accept()` ran once, so a speculative connection or a
+    /// favicon fetch could consume the whole flow and leave the real redirect
+    /// refused — indistinguishable from never having listened.
+    #[tokio::test]
+    async fn a_stray_request_does_not_consume_the_flow() {
+        let lb = start_loopback().await.unwrap();
+        let port: u16 = lb.redirect_uri.rsplit(':').next().unwrap().parse().unwrap();
+        let task = tokio::spawn(await_loopback_code(lb));
+
+        let mut junk = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        junk.write_all(b"GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut resp = String::new();
+        let _ = junk.read_to_string(&mut resp).await;
+        assert!(resp.contains("204"), "stray request should be answered: {resp}");
+
+        let mut real = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        real.write_all(b"GET /?code=real HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut resp = String::new();
+        let _ = real.read_to_string(&mut resp).await;
+        assert_eq!(task.await.unwrap().unwrap(), "real");
+    }
+
+    /// A connection that opens and closes without sending anything — which
+    /// browsers do when pre-warming — must not end the wait either.
+    #[tokio::test]
+    async fn an_empty_connection_does_not_end_the_wait() {
+        let lb = start_loopback().await.unwrap();
+        let port: u16 = lb.redirect_uri.rsplit(':').next().unwrap().parse().unwrap();
+        let task = tokio::spawn(await_loopback_code(lb));
+
+        drop(tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap());
+
+        let mut real = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        real.write_all(b"GET /?code=still-here HTTP/1.1\r\n\r\n").await.unwrap();
+        let mut resp = String::new();
+        let _ = real.read_to_string(&mut resp).await;
+        assert_eq!(task.await.unwrap().unwrap(), "still-here");
     }
 }

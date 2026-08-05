@@ -1248,7 +1248,8 @@ pub async fn get_server_status(
 pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Account> {
     use crate::microsoft;
 
-    let (redirect_uri, listener) = microsoft::start_loopback().await?;
+    let loopback = microsoft::start_loopback().await?;
+    let redirect_uri = loopback.redirect_uri.clone();
     let url = microsoft::authorize_url_for(&redirect_uri);
 
     open::that(&url)
@@ -1261,7 +1262,7 @@ pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Accou
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
     *state.login_cancel.lock().unwrap() = Some(cancel_tx);
 
-    let wait = microsoft::await_loopback_code(listener);
+    let wait = microsoft::await_loopback_code(loopback);
     tokio::pin!(wait);
 
     let code = tokio::select! {
