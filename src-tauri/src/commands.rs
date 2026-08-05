@@ -338,9 +338,11 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
             let version = m.id.split(':').nth(2).unwrap_or("").to_string();
             match m.module_type {
                 ModuleType::Fabric => Some(DeclaredLoader::Fabric(version)),
-                ModuleType::Forge | ModuleType::ForgeHosted | ModuleType::LiteLoader => {
-                    Some(DeclaredLoader::Forge)
-                }
+                // ForgeHosted ships the installer's output, so the expensive
+                // part is already done; the id names the version manifest to
+                // read once the modules are on disk.
+                ModuleType::ForgeHosted => Some(DeclaredLoader::ForgeHosted(m.id.clone())),
+                ModuleType::Forge | ModuleType::LiteLoader => Some(DeclaredLoader::Forge),
                 _ => None,
             }
         });
@@ -351,15 +353,17 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         )
     };
 
-    // Fabric resolves from metadata and is supported. Forge ships an
-    // installer that must run locally, so it is still refused — with a
-    // message that says why rather than pointing at a launcher that no longer
-    // exists.
+    // Fabric and ForgeHosted both resolve from metadata that already exists.
+    // Plain Forge does not: the distribution gives only a version number, and
+    // turning that into a launchable game means running Forge's installer
+    // locally. Refused with a message that says which alternative works,
+    // since the fix is on the distribution's side, not the player's.
     if matches!(declared_loader, Some(DeclaredLoader::Forge)) {
         return Err(Error::Other(
-            "This server uses Forge, which is not supported yet. Forge ships an installer \
-             that has to run on your machine — patching the game jar and running its \
-             processors — before the game can start. Fabric servers work today."
+            "This server declares Forge as a plain version number, which requires running \
+             Forge's installer locally to patch the game jar. That is not supported. A \
+             distribution can ship the installer's output instead (a ForgeHosted module \
+             with a version manifest), which does work — as does Fabric."
                 .into(),
         ));
     }
@@ -427,46 +431,6 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         })
         .await?;
     }
-
-    // Resolve the loader and fetch its libraries. Done after the vanilla
-    // validation pass so a loader failure cannot leave a half-downloaded game.
-    let loader_profile = match &declared_loader {
-        Some(DeclaredLoader::Fabric(version)) => {
-            emit_progress(&app, "loader", "Resolving Fabric", 90.0);
-            let http = reqwest::Client::new();
-            let profile = crate::loader::resolve_fabric(&http, &mc_version, version).await?;
-
-            let lib_dir = crate::dl::library_dir(&common_dir);
-            let mut needed = Vec::new();
-            for lib in &profile.libraries {
-                let rel = lib.maven_path()?;
-                let path = crate::paths::safe_join(&lib_dir, &rel)?;
-                if !crate::dl::validate_local_file(&path, None).await {
-                    needed.push(crate::dl::Asset {
-                        id: lib.name.clone(),
-                        // Fabric's metadata carries no hashes, so these cannot
-                        // be checksum-validated the way Mojang's are. Recorded
-                        // rather than silently skipped.
-                        hash: String::new(),
-                        size: 0,
-                        url: lib.download_url()?,
-                        path,
-                    });
-                }
-            }
-            if !needed.is_empty() {
-                emit_progress(
-                    &app,
-                    "loader",
-                    &format!("Downloading {} Fabric libraries", needed.len()),
-                    91.0,
-                );
-                crate::dl::download_unverified(&needed, 8).await?;
-            }
-            Some(profile)
-        }
-        _ => None,
-    };
 
     // Download the distribution's own modules — the mods, configs and files
     // the server declares. Without this the game starts with an empty mods/
@@ -537,6 +501,108 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
             .await?;
         }
     }
+
+
+    // Resolve the loader and fetch its libraries. Done after the vanilla
+    // validation pass so a loader failure cannot leave a half-downloaded game.
+    let loader_profile = match &declared_loader {
+        Some(DeclaredLoader::Fabric(version)) => {
+            emit_progress(&app, "loader", "Resolving Fabric", 90.0);
+            let http = reqwest::Client::new();
+            let profile = crate::loader::resolve_fabric(&http, &mc_version, version).await?;
+
+            let lib_dir = crate::dl::library_dir(&common_dir);
+            let mut needed = Vec::new();
+            for lib in &profile.libraries {
+                let rel = lib.maven_path()?;
+                let path = crate::paths::safe_join(&lib_dir, &rel)?;
+                if !crate::dl::validate_local_file(&path, None).await {
+                    needed.push(crate::dl::Asset {
+                        id: lib.name.clone(),
+                        // Fabric's metadata carries no hashes, so these cannot
+                        // be checksum-validated the way Mojang's are. Recorded
+                        // rather than silently skipped.
+                        hash: String::new(),
+                        size: 0,
+                        url: lib.download_url()?,
+                        path,
+                    });
+                }
+            }
+            if !needed.is_empty() {
+                emit_progress(
+                    &app,
+                    "loader",
+                    &format!("Downloading {} Fabric libraries", needed.len()),
+                    91.0,
+                );
+                crate::dl::download_unverified(&needed, 8).await?;
+            }
+            Some(profile)
+        }
+        Some(DeclaredLoader::ForgeHosted(module_id)) => {
+            emit_progress(&app, "loader", "Reading the Forge manifest", 93.0);
+
+            // Pre-1.13 ForgeHosted distributions ship their libraries as
+            // `.jar.pack.xz` — XZ-compressed pack200. Java removed pack200 in
+            // 14 and there is no Rust implementation; the Electron original
+            // shipped a Java helper jar to unpack them. Refused explicitly,
+            // because the alternative is a classpath of files the JVM cannot
+            // read and a crash far from the cause.
+            if !crate::distribution::mc_version_at_least("1.13", &mc_version) {
+                return Err(Error::Other(format!(
+                    "This server uses Forge for Minecraft {mc_version}. Versions before 1.13 \
+                     ship their libraries as pack200 archives, a format Java removed in \
+                     version 14 and which this launcher cannot unpack. Forge on 1.13 and \
+                     newer works."
+                )));
+            }
+
+            // The manifest's id is not derivable from the module id by any
+            // rule worth trusting, so find the VersionManifest module that
+            // declares it.
+            let manifest_id = {
+                let guard = state.distribution.lock().unwrap();
+                guard
+                    .as_ref()
+                    .and_then(|d| d.server_by_id(&server_id))
+                    .and_then(|srv| srv.modules.iter().find(|m| &m.id == module_id))
+                    .and_then(|forge| {
+                        forge
+                            .sub_modules
+                            .iter()
+                            .find(|sm| sm.module_type == ModuleType::VersionManifest)
+                            .map(|sm| sm.id.clone())
+                    })
+            }
+            .ok_or_else(|| {
+                Error::Other(
+                    "This server declares Forge but ships no version manifest. A ForgeHosted \
+                     distribution must include the installer's output as a VersionManifest \
+                     module; without it there is nothing to launch."
+                        .into(),
+                )
+            })?;
+
+            let path = common_dir
+                .join("versions")
+                .join(&manifest_id)
+                .join(format!("{manifest_id}.json"));
+            let json = tokio::fs::read_to_string(&path).await.map_err(|e| {
+                Error::Other(format!(
+                    "Could not read the Forge manifest at {}: {e}",
+                    path.display()
+                ))
+            })?;
+
+            Some(crate::loader::profile_from_forge_json(
+                &json,
+                &common_dir,
+                &manifest_id,
+            )?)
+        }
+        _ => None,
+    };
 
     emit_progress(&app, "java", "Locating a compatible Java runtime", 96.0);
     let jvm = match &java_config.executable {
@@ -1605,6 +1671,9 @@ pub fn export_diagnostics(
 enum DeclaredLoader {
     /// Carries the pinned version; empty means newest.
     Fabric(String),
-    /// Forge, ForgeHosted and LiteLoader all need the installer pipeline.
+    /// Carries the ForgeHosted module's maven id, from which the game version
+    /// and the id of the shipped version manifest are derived.
+    ForgeHosted(String),
+    /// Modern Forge and LiteLoader, which need the installer pipeline.
     Forge,
 }

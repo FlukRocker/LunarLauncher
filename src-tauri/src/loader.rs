@@ -228,6 +228,87 @@ pub async fn resolve_fabric(
 /// produce the client it then launches. Half of that pipeline would produce a
 /// game that starts and then fails deep inside itself, which is worse than
 /// refusing.
+/// The subset of a Forge version JSON the launch needs.
+///
+/// This is the *installer's output*, which a `ForgeHosted` distribution ships
+/// as a `VersionManifest` module rather than making the launcher produce it.
+/// That is the whole reason ForgeHosted is supportable and plain `Forge` is
+/// not: the expensive part has already been done and published.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ForgeVersionJson {
+    main_class: String,
+    #[serde(default)]
+    arguments: ForgeArguments,
+    #[serde(default)]
+    libraries: Vec<ForgeLibrary>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ForgeArguments {
+    #[serde(default)]
+    game: Vec<serde_json::Value>,
+    #[serde(default)]
+    jvm: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ForgeLibrary {
+    name: String,
+}
+
+/// Only the plain strings. Forge's argument lists may also contain rule
+/// objects; none of the ones Forge emits apply to a normal client launch, and
+/// silently dropping them is safer than half-applying a rule system that is
+/// already implemented for the vanilla arguments.
+fn plain_strings(values: &[serde_json::Value]) -> Vec<String> {
+    values
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect()
+}
+
+/// Build a launch profile from a Forge version JSON already on disk.
+///
+/// The placeholders Forge leaves in its JVM arguments are substituted here
+/// rather than in `process_builder`, because they are Forge's own vocabulary —
+/// `${library_directory}` and `${classpath_separator}` appear in no vanilla
+/// version JSON.
+pub fn profile_from_forge_json(
+    json: &str,
+    common_dir: &std::path::Path,
+    version_name: &str,
+) -> Result<LoaderProfile> {
+    let parsed: ForgeVersionJson = serde_json::from_str(json)
+        .map_err(|e| Error::Other(format!("Forge version manifest is not readable: {e}")))?;
+
+    let lib_dir = common_dir.join("libraries");
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    let substitute = |s: &str| {
+        s.replace("${library_directory}", &lib_dir.to_string_lossy())
+            .replace("${classpath_separator}", sep)
+            .replace("${version_name}", version_name)
+    };
+
+    Ok(LoaderProfile {
+        main_class: parsed.main_class,
+        libraries: parsed
+            .libraries
+            .into_iter()
+            // No repo: every one of these is shipped by the distribution as a
+            // Library module and is already on disk by the time this runs.
+            .map(|l| Library { name: l.name, repo_url: String::new() })
+            .collect(),
+        game_args: plain_strings(&parsed.arguments.game),
+        jvm_args: plain_strings(&parsed.arguments.jvm)
+            .iter()
+            .map(|s| substitute(s))
+            .collect(),
+        min_java: None,
+    })
+}
+
+/// Modern Forge, where the distribution ships only a version number.
 pub fn resolve_forge(_game_version: &str, _loader_version: &str) -> Result<LoaderProfile> {
     Err(Error::Other(
         "Forge support is not implemented yet. Unlike Fabric, Forge ships an installer \
@@ -346,5 +427,87 @@ mod tests {
         for l in &p.libraries {
             l.download_url().expect("every library resolves to a url");
         }
+    }
+}
+
+#[cfg(test)]
+mod forge_tests {
+    use super::*;
+
+    /// Trimmed from a real 1.16.5 Forge manifest — enough to exercise every
+    /// placeholder Forge actually emits.
+    const FORGE_1_16_5: &str = r#"{
+      "id": "1.16.5-forge-36.2.34",
+      "inheritsFrom": "1.16.5",
+      "mainClass": "cpw.mods.modlauncher.Launcher",
+      "arguments": {
+        "game": ["--launchTarget", "fmlclient", "--fml.forgeVersion", "36.2.34"],
+        "jvm": [
+          "-p",
+          "${library_directory}/cpw/mods/modlauncher/8.0.9/modlauncher-8.0.9.jar${classpath_separator}${library_directory}/org/ow2/asm/asm/9.1/asm-9.1.jar",
+          "--add-modules", "ALL-MODULE-PATH",
+          "-DlegacyClassPath.file=${version_name}.txt"
+        ]
+      },
+      "libraries": [
+        { "name": "net.minecraftforge:forge:1.16.5-36.2.34:client" },
+        { "name": "cpw.mods:modlauncher:8.0.9" }
+      ]
+    }"#;
+
+    fn profile() -> LoaderProfile {
+        profile_from_forge_json(FORGE_1_16_5, std::path::Path::new("/c"), "1.16.5-forge-36.2.34")
+            .unwrap()
+    }
+
+    #[test]
+    fn the_main_class_comes_from_the_manifest() {
+        assert_eq!(profile().main_class, "cpw.mods.modlauncher.Launcher");
+    }
+
+    #[test]
+    fn game_arguments_are_preserved_in_order() {
+        assert_eq!(
+            profile().game_args,
+            ["--launchTarget", "fmlclient", "--fml.forgeVersion", "36.2.34"]
+        );
+    }
+
+    /// The placeholders are Forge's own vocabulary — no vanilla version JSON
+    /// contains them — so nothing downstream would substitute them, and an
+    /// unsubstituted `${library_directory}` becomes a module path the JVM
+    /// rejects at startup.
+    #[test]
+    fn forge_placeholders_are_substituted() {
+        let jvm = profile().jvm_args.join(" ");
+        assert!(!jvm.contains("${"), "left unsubstituted: {jvm}");
+        assert!(jvm.contains("/c/libraries/cpw/mods/modlauncher/8.0.9/modlauncher-8.0.9.jar"));
+        assert!(jvm.contains("-DlegacyClassPath.file=1.16.5-forge-36.2.34.txt"));
+    }
+
+    #[test]
+    fn the_classpath_separator_is_the_platform_one() {
+        let jvm = profile().jvm_args.join(" ");
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        assert!(jvm.contains(&format!("modlauncher-8.0.9.jar{sep}")));
+    }
+
+    /// A classifier is a filename suffix, not a path segment. Forge's own
+    /// artifacts are published with `:client` and `:universal`, so getting
+    /// this wrong drops exactly the jars that make it Forge.
+    #[test]
+    fn forge_libraries_resolve_including_classifiers() {
+        let libs = profile().libraries;
+        assert_eq!(
+            libs[0].maven_path().unwrap(),
+            "net/minecraftforge/forge/1.16.5-36.2.34/forge-1.16.5-36.2.34-client.jar"
+        );
+        assert_eq!(libs.len(), 2);
+    }
+
+    #[test]
+    fn a_manifest_that_is_not_json_is_reported_not_panicked_on() {
+        let err = profile_from_forge_json("<html>404</html>", std::path::Path::new("/c"), "x");
+        assert!(err.is_err());
     }
 }

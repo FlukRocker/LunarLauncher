@@ -31,6 +31,17 @@ fn destination(
     instance_dir: &Path,
     common_dir: &Path,
 ) -> Result<Option<PathBuf>> {
+    // Resolved before the maven path, because a manifest id is not a
+    // coordinate — `1.16.5-forge-36.2.34` has no group or artifact — and
+    // deriving one would fail before this arm was ever reached.
+    if module.module_type == ModuleType::VersionManifest {
+        let id = &module.id;
+        return Ok(Some(safe_join(
+            &common_dir.join("versions"),
+            &format!("{id}/{id}.json"),
+        )?));
+    }
+
     let rel = artifact_relative_path(module)?;
 
     Ok(match module.module_type {
@@ -45,15 +56,17 @@ fn destination(
             Some(safe_join(&instance_dir.join("mods"), &name)?)
         }
         ModuleType::File => Some(safe_join(instance_dir, &rel)?),
-        ModuleType::Library => Some(safe_join(&common_dir.join("libraries"), &rel)?),
-        // The loader manifest and the loader itself are handled by the loader
-        // path, not here.
-        ModuleType::ForgeHosted
-        | ModuleType::Forge
-        | ModuleType::Fabric
-        | ModuleType::LiteLoader
-        | ModuleType::VersionManifest
-        | ModuleType::Unknown => None,
+        // The ForgeHosted module is itself a maven artifact — the forge jar —
+        // and its libraries sit beside it, so both resolve like any library.
+        ModuleType::Library | ModuleType::ForgeHosted => {
+            Some(safe_join(&common_dir.join("libraries"), &rel)?)
+        }
+        ModuleType::VersionManifest => unreachable!("handled above"),
+        // Resolved from their own metadata by the loader path, not shipped as
+        // artifacts here.
+        ModuleType::Forge | ModuleType::Fabric | ModuleType::LiteLoader | ModuleType::Unknown => {
+            None
+        }
     })
 }
 
@@ -225,12 +238,42 @@ mod tests {
     }
 
     #[test]
-    fn loader_modules_are_not_downloaded_here() {
+    fn loaders_resolved_from_their_own_metadata_are_not_downloaded_here() {
         let (inst, common) = dirs();
-        for kind in [ModuleType::Fabric, ModuleType::ForgeHosted, ModuleType::VersionManifest] {
+        for kind in [ModuleType::Fabric, ModuleType::Forge, ModuleType::LiteLoader] {
             let m = module("net.fabricmc:fabric-loader:0.19.3", kind, None, None);
             assert!(destination(&m, &inst, &common).unwrap().is_none(), "{kind:?}");
         }
+    }
+
+    /// ForgeHosted is the opposite case: the distribution ships the installer's
+    /// output, so its artifact and its version JSON are real files that must
+    /// land on disk before the loader path can read them.
+    #[test]
+    fn forgehosted_artifacts_are_downloaded() {
+        let (inst, common) = dirs();
+        let m = module(
+            "net.minecraftforge:forge:1.16.5-36.2.34",
+            ModuleType::ForgeHosted,
+            None,
+            None,
+        );
+        assert_eq!(
+            destination(&m, &inst, &common).unwrap().unwrap(),
+            common.join("libraries/net/minecraftforge/forge/1.16.5-36.2.34/forge-1.16.5-36.2.34.jar")
+        );
+    }
+
+    /// The version manifest is keyed by id, not by maven coordinate — its id is
+    /// `1.16.5-forge-36.2.34`, which is not a coordinate at all.
+    #[test]
+    fn the_version_manifest_lands_where_the_loader_path_looks_for_it() {
+        let (inst, common) = dirs();
+        let m = module("1.16.5-forge-36.2.34", ModuleType::VersionManifest, None, None);
+        assert_eq!(
+            destination(&m, &inst, &common).unwrap().unwrap(),
+            common.join("versions/1.16.5-forge-36.2.34/1.16.5-forge-36.2.34.json")
+        );
     }
 
     #[test]
