@@ -131,10 +131,11 @@ pub fn run() {
 /// retrying — an unverifiable update channel is worse than none, since it
 /// would mean downloading and executing code nobody signed.
 ///
-/// The key is now populated, so the remaining requirement is a reachable
-/// endpoint publishing a signed `latest.json`. Until one exists the check
-/// fails per launch and is logged at debug, which is deliberately quiet: a
-/// user cannot act on it and it must never block startup.
+/// The key is populated, but `active` is back to false until a real endpoint
+/// exists. Pointing an enabled updater at a placeholder host bought nothing —
+/// every launch made a request that could only fail — while adding startup
+/// work on a path that has to be reliable. Flip it on together with the
+/// endpoint, not before.
 fn check_for_updates(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         use tauri_plugin_updater::UpdaterExt;
