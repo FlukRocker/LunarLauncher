@@ -777,14 +777,41 @@ img.mediaSVG {
 
 /* --- Server picker ------------------------------------------------------ */
 
-.serverPicker {
-    position: absolute;
-    bottom: 100%;
-    right: 0;
-    margin: 0 0 10px;
-    padding: 6px;
+.serverPicker__scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    z-index: 200;
+    animation: viewFadeIn 0.18s ease both;
+}
+
+.serverPicker__title {
+    margin: 0 0 14px;
+    font-family: 'Avenir Medium', sans-serif;
+    font-size: 18px;
+    color: #fff;
+}
+
+.serverPicker__list {
     list-style: none;
-    min-width: 240px;
+    margin: 0;
+    padding: 0;
+}
+
+/* A centred dialog rather than a popover anchored in the footer: an absolutely
+   positioned menu can be clipped by any ancestor, and that is not something
+   this codebase can verify on every platform. */
+.serverPicker {
+    min-width: 340px;
+    max-width: 460px;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 22px 24px;
+    border-radius: 10px;
     background: var(--reading-surface);
     border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);

@@ -172,6 +172,77 @@ export function Landing({
     return (
         <div id="landingContainer">
             {modal && <ErrorModal error={modal} onClose={() => setModal(null)} />}
+
+            {picking && (
+                <div
+                    className="serverPicker__scrim"
+                    role="presentation"
+                    onClick={() => setPicking(false)}
+                >
+                    <div
+                        className="serverPicker"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Choose a server"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h2 className="serverPicker__title">Choose a server</h2>
+                        {servers.length === 0 && (
+                            <p className="panel__hint">
+                                No servers were loaded from the distribution.
+                            </p>
+                        )}
+                        <ul className="serverPicker__list">
+                            {servers.map((s) => (
+                                <li key={s.id}>
+                                    <button
+                                        className={`serverPicker__item${
+                                            server?.id === s.id
+                                                ? ' serverPicker__item--active'
+                                                : ''
+                                        }`}
+                                        onClick={() => {
+                                            setPicking(false)
+                                            void api
+                                                .setSelectedServer(s.id)
+                                                .then(() => api.getSelectedServer())
+                                                .then((sel) => {
+                                                    setServer(sel)
+                                                    setError(null)
+                                                    // The old server's count
+                                                    // must not linger.
+                                                    setStatus(null)
+                                                    if (sel)
+                                                        void statusApi
+                                                            .getServerStatus(sel.id)
+                                                            .then(setStatus)
+                                                            .catch(() => {})
+                                                })
+                                                .catch((err: unknown) =>
+                                                    setError(
+                                                        isApiError(err)
+                                                            ? err.message
+                                                            : String(err)
+                                                    )
+                                                )
+                                        }}
+                                    >
+                                        <span className="serverPicker__name">{s.name}</span>
+                                        <span className="serverPicker__meta">
+                                            {s.minecraftVersion}
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                        <div className="panel__actions">
+                            <button className="button" onClick={() => setPicking(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div id="upper">
                 <div id="left">
                     <div id="image_seal_container">
@@ -314,64 +385,18 @@ export function Landing({
                                 // Switching servers mid-download would leave
                                 // files half-written against the wrong
                                 // instance, so this is inert while busy.
-                                disabled={launching || playing || servers.length < 2}
-                                title={
-                                    servers.length < 2
-                                        ? 'This distribution has only one server'
-                                        : 'Change server'
-                                }
+                                // Only launch state disables this. Gating on
+                                // servers.length would leave the control
+                                // permanently dead whenever the distribution
+                                // fetch failed, with no way to tell why.
+                                disabled={launching || playing}
+                                title="Change server"
                                 onClick={() => setPicking((v) => !v)}
                             >
                                 {server ? `• ${server.name}` : '• No Server Selected'}
                             </button>
 
-                            {picking && (
-                                <ul className="serverPicker">
-                                    {servers.map((s) => (
-                                        <li key={s.id}>
-                                            <button
-                                                className={`serverPicker__item${
-                                                    server?.id === s.id
-                                                        ? ' serverPicker__item--active'
-                                                        : ''
-                                                }`}
-                                                onClick={() => {
-                                                    setPicking(false)
-                                                    void api
-                                                        .setSelectedServer(s.id)
-                                                        .then(() => api.getSelectedServer())
-                                                        .then((sel) => {
-                                                            setServer(sel)
-                                                            setError(null)
-                                                            // Status belongs to
-                                                            // the old server.
-                                                            setStatus(null)
-                                                            if (sel)
-                                                                void statusApi
-                                                                    .getServerStatus(sel.id)
-                                                                    .then(setStatus)
-                                                                    .catch(() => {})
-                                                        })
-                                                        .catch((err: unknown) =>
-                                                            setError(
-                                                                isApiError(err)
-                                                                    ? err.message
-                                                                    : String(err)
-                                                            )
-                                                        )
-                                                }}
-                                            >
-                                                <span className="serverPicker__name">
-                                                    {s.name}
-                                                </span>
-                                                <span className="serverPicker__meta">
-                                                    {s.minecraftVersion}
-                                                </span>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+
                         </div>
                         <div
                             id="launch_details"
