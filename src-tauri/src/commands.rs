@@ -468,7 +468,77 @@ pub async fn launch_game(app: tauri::AppHandle, state: State<'_, AppState>) -> R
         _ => None,
     };
 
-    emit_progress(&app, "java", "Locating a compatible Java runtime", 92.0);
+    // Download the distribution's own modules — the mods, configs and files
+    // the server declares. Without this the game starts with an empty mods/
+    // directory, which for Fabric is nearly indistinguishable from vanilla at
+    // the main menu, so the failure is silent.
+    {
+        let saved: std::collections::HashMap<String, bool> = state.config.with(|c| {
+            c.mod_configurations
+                .iter()
+                .find(|m| m.id == server_id)
+                .and_then(|m| m.mods.as_object().cloned())
+                .map(|o| {
+                    o.into_iter()
+                        .filter_map(|(k, v)| v.as_bool().map(|b| (k, b)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        })?;
+
+        let modules = {
+            let guard = state.distribution.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|d| d.server_by_id(&server_id).map(|s| s.modules.clone()))
+                .unwrap_or_default()
+        };
+
+        let mut wanted = Vec::new();
+        crate::modules::collect_downloads(
+            &modules,
+            &saved,
+            &game_dir,
+            &common_dir,
+            0,
+            &mut wanted,
+        );
+
+        // Only fetch what is missing or fails its digest, so a relaunch does
+        // not re-download a 300-mod pack.
+        let mut needed = Vec::new();
+        for asset in wanted {
+            if !crate::dl::validate_by_digest_length(&asset.path, &asset.hash).await {
+                needed.push(asset);
+            }
+        }
+
+        if !needed.is_empty() {
+            let mb = needed.iter().map(|a| a.size).sum::<u64>() as f64 / 1_048_576.0;
+            emit_progress(
+                &app,
+                "modules",
+                &format!("Downloading {} mods and files ({mb:.0} MB)", needed.len()),
+                92.0,
+            );
+            let handle = app.clone();
+            let list = crate::dl::RepairList {
+                assets: needed,
+                ..Default::default()
+            };
+            crate::dl::download_all(&list, 16, move |p| {
+                emit_progress(
+                    &handle,
+                    "modules",
+                    &format!("{}/{}", p.completed, p.total),
+                    92.0 + p.percent * 0.04,
+                );
+            })
+            .await?;
+        }
+    }
+
+    emit_progress(&app, "java", "Locating a compatible Java runtime", 96.0);
     let jvm = match &java_config.executable {
         Some(exec) => crate::java::validate_jvm(exec, &java_supported).await?,
         None => crate::java::select_jvm(&data_dir, &java_supported).await,
