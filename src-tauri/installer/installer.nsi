@@ -399,7 +399,89 @@ Var AppStartMenuFolder
 !insertmacro MUI_PAGE_STARTMENU Application $AppStartMenuFolder
 
 ; 7. Installation page
+;
+; ---------------------------------------------------------------------
+; LUNAR: this is the only page a normal install shows, so it is the whole
+; visible installer. Restyled to the Cyber Network palette rather than left
+; as the stock grey dialog.
+;
+; SetCtlColors takes RGB the way HTML does. The two progress-bar messages do
+; not: PBM_SETBARCOLOR wants a COLORREF, which is byte-reversed, so #35d97a is
+; written 0x7AD935 below. Getting that backwards yields a plausible wrong
+; colour rather than an error.
+;
+; The bar also has to have its visual theme removed first. A themed progress
+; bar silently ignores both colour messages — it does not fail, it just stays
+; green-on-white, which reads as the code not having run.
+; ---------------------------------------------------------------------
+!define LUNAR_BG 0x05070A
+!define LUNAR_INK 0xE9F4F4
+!define LUNAR_DIM 0x93A8AD
+!define LUNAR_PB_BG 0x0A0705      ; COLORREF of #05070a
+!define LUNAR_PB_BAR 0x7AD935     ; COLORREF of #35d97a
+!define PBM_SETBARCOLOR 0x0409
+!define PBM_SETBKCOLOR 0x2001
+
+!define MUI_PAGE_HEADER_TEXT "Installing ${PRODUCTNAME}"
+!define MUI_PAGE_HEADER_SUBTEXT "This takes a few seconds."
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW LunarBrandInstallPage
 !insertmacro MUI_PAGE_INSTFILES
+
+Function LunarBrandInstallPage
+  SetCtlColors $HWNDPARENT ${LUNAR_INK} ${LUNAR_BG}
+
+  ; Header strip: title, subtitle, the icon well, and the white plate behind
+  ; them. Left light, the dark page below looks like a rendering fault.
+  ${ForEach} $3 1034 1039 + 1
+    GetDlgItem $0 $HWNDPARENT $3
+    ${If} $0 <> 0
+      SetCtlColors $0 ${LUNAR_INK} ${LUNAR_BG}
+    ${EndIf}
+  ${Next}
+
+  ; Bottom bar and its branding text.
+  GetDlgItem $0 $HWNDPARENT 1256
+  ${If} $0 <> 0
+    SetCtlColors $0 ${LUNAR_DIM} ${LUNAR_BG}
+  ${EndIf}
+  GetDlgItem $0 $HWNDPARENT 1028
+  ${If} $0 <> 0
+    SetCtlColors $0 ${LUNAR_DIM} ${LUNAR_BG}
+  ${EndIf}
+
+  ; The page is a child dialog of the wizard, so its controls are found
+  ; through it rather than through $HWNDPARENT.
+  FindWindow $1 "#32770" "" $HWNDPARENT
+  ${If} $1 = 0
+    Return
+  ${EndIf}
+  SetCtlColors $1 ${LUNAR_INK} ${LUNAR_BG}
+
+  GetDlgItem $0 $1 1006
+  ${If} $0 <> 0
+    SetCtlColors $0 ${LUNAR_DIM} ${LUNAR_BG}
+  ${EndIf}
+
+  ; The details list is extraction log output. Useful when debugging a failed
+  ; install, meaningless to a player, and the single biggest thing making this
+  ; look like a 2003 setup wizard. 0 is SW_HIDE, written literally because
+  ; WinMessages.nsh is not included here.
+  GetDlgItem $0 $1 1016
+  ${If} $0 <> 0
+    ShowWindow $0 0
+  ${EndIf}
+  GetDlgItem $0 $1 1027
+  ${If} $0 <> 0
+    ShowWindow $0 0
+  ${EndIf}
+
+  GetDlgItem $0 $1 1004
+  ${If} $0 <> 0
+    System::Call 'uxtheme::SetWindowTheme(p $0, w " ", w " ")'
+    SendMessage $0 ${PBM_SETBKCOLOR} 0 ${LUNAR_PB_BG}
+    SendMessage $0 ${PBM_SETBARCOLOR} 0 ${LUNAR_PB_BAR}
+  ${EndIf}
+FunctionEnd
 
 ; 8. Finish page
 ;
