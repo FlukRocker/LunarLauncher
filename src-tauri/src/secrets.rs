@@ -221,6 +221,24 @@ pub fn is_sealed(value: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// Turns the skip branches below into a signal rather than a silence.
+    ///
+    /// Every other test in this module returns early when no keystore is
+    /// present, which means a platform that quietly lost keystore support
+    /// would show a green suite that asserted nothing. Linux is exempt because
+    /// a headless container genuinely has no Secret Service, and the
+    /// documented fallback there is plaintext with a warning.
+    #[test]
+    fn the_keystore_is_usable_on_the_platforms_that_have_one() {
+        if cfg!(target_os = "linux") {
+            return;
+        }
+        assert!(
+            available(),
+            "no keystore: credentials would silently be stored in the clear"
+        );
+    }
+
     /// The round trip, exercised only where a keystore actually exists. CI
     /// containers have no Secret Service, and a test that silently passed by
     /// falling through to plaintext would assert nothing.
