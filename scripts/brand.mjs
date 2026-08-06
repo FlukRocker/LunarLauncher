@@ -66,6 +66,8 @@ if (brand) {
     }
     set('productName', brand)
     set('app.windows', [{ title: brand }])
+    // Otherwise every brand's shortcuts land in a folder named "Lunar Launcher".
+    set('bundle.windows.nsis.startMenuFolder', brand)
 }
 
 const identifier = get('LUNAR_APP_IDENTIFIER')

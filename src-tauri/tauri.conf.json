@@ -42,7 +42,21 @@
     ],
     "category": "Game",
     "shortDescription": "Modded Minecraft Launcher",
-    "longDescription": "Custom launcher which allows users to join modded servers. All mods, configurations, and updates are handled automatically."
+    "longDescription": "Custom launcher which allows users to join modded servers. All mods, configurations, and updates are handled automatically.",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
+        "installMode": "both",
+        "languages": [
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "startMenuFolder": "Lunar Launcher",
+        "compression": "lzma"
+      }
+    }
   },
   "plugins": {
     "updater": {
