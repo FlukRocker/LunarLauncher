@@ -18,6 +18,51 @@ pub mod process_builder;
 
 use commands::AppState;
 
+/// A daily-rotated log file under the launcher directory, capped so it cannot
+/// grow without bound on a machine nobody ever cleans up.
+///
+/// Returns the guard alongside the layer: it flushes the non-blocking writer on
+/// drop, so whatever holds the layer must hold this for exactly as long.
+///
+/// Generic over the subscriber because the layer is added to a stack that
+/// already has the filter on it — a box typed against bare `Registry` does not
+/// match `Layered<EnvFilter, Registry>` and will not compose.
+///
+/// Takes the directory rather than reading `paths::log_directory()` itself, so
+/// a test can exercise it without writing into the real launcher directory.
+#[allow(clippy::type_complexity)]
+fn file_log_layer<S>(
+    dir: &std::path::Path,
+) -> std::io::Result<(
+    Box<dyn tracing_subscriber::Layer<S> + Send + Sync>,
+    tracing_appender::non_blocking::WorkerGuard,
+)>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    use tracing_subscriber::Layer;
+
+    std::fs::create_dir_all(dir)?;
+
+    let appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("launcher")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build(dir)
+        .map_err(std::io::Error::other)?;
+
+    let (writer, guard) = tracing_appender::non_blocking(appender);
+    // No ANSI: colour escapes are noise in a file somebody opens in Notepad to
+    // paste into a bug report.
+    let layer = tracing_subscriber::fmt::layer()
+        .with_writer(writer)
+        .with_ansi(false)
+        .boxed();
+
+    Ok((layer, guard))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Telemetry settings live in config.json, which the app has not loaded
@@ -34,27 +79,54 @@ pub fn run() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "info".into());
 
-    match telemetry::build_layer(&telemetry) {
-        Ok(Some(otel)) => {
-            use tracing_subscriber::layer::SubscriberExt;
-            use tracing_subscriber::util::SubscriberInitExt;
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(tracing_subscriber::fmt::layer())
-                .with(otel)
-                .init();
-            tracing::info!(endpoint = %telemetry.endpoint, "OpenTelemetry enabled");
-        }
-        Ok(None) => {
-            tracing_subscriber::fmt().with_env_filter(filter).init();
-        }
+    // Log to a file as well as stdout, because on Windows stdout does not
+    // exist: release builds set `windows_subsystem = "windows"` (main.rs) so
+    // the process has no console, and every line written here goes nowhere.
+    // That made Windows-only failures undiagnosable — a refused sign-in
+    // redirect emitted both the port it was waiting on and a warning that the
+    // IPv6 bind had failed, and neither was recoverable after the fact.
+    //
+    // The guard must outlive the app: dropping it flushes and stops the
+    // writer thread, so binding it to `_` (rather than a name) would discard
+    // every buffered line at the end of this statement.
+    let (file_layer, _log_guard) = match file_log_layer(&paths::log_directory()) {
+        Ok((layer, guard)) => (Some(layer), Some(guard)),
         Err(err) => {
-            tracing_subscriber::fmt().with_env_filter(filter).init();
-            tracing::error!(%err, "Telemetry setup failed; continuing without it");
+            eprintln!("File logging unavailable, continuing with stdout only: {err}");
+            (None, None)
         }
+    };
+
+    // `build_layer` is fallible and its error is worth seeing, but nothing can
+    // be logged until the subscriber is installed — so the outcome is held and
+    // reported afterwards rather than swallowed.
+    let (otel_layer, otel_err) = match telemetry::build_layer(&telemetry) {
+        Ok(layer) => (layer, None),
+        Err(err) => (None, Some(err)),
+    };
+
+    {
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer())
+            .with(file_layer)
+            .with(otel_layer)
+            .init();
     }
 
-    tracing::info!("Lunar Launcher starting");
+    if let Some(err) = otel_err {
+        tracing::error!(%err, "Telemetry setup failed; continuing without it");
+    } else if !telemetry.endpoint.is_empty() {
+        tracing::info!(endpoint = %telemetry.endpoint, "OpenTelemetry enabled");
+    }
+
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        log_dir = %paths::log_directory().display(),
+        "Lunar Launcher starting"
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -164,4 +236,46 @@ fn check_for_updates(app: tauri::AppHandle) {
             Err(err) => tracing::warn!(%err, "Update check failed; continuing."),
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The whole point of the file layer is that it works where stdout does
+    /// not, so "it compiles" is not evidence. This writes through a real
+    /// subscriber and reads the bytes back off disk.
+    #[test]
+    fn a_logged_line_reaches_a_file_on_disk() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let dir = std::env::temp_dir().join("lunar-log-layer-test");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (layer, guard) = file_log_layer(&dir).expect("layer");
+        let subscriber = tracing_subscriber::registry().with(layer);
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(port = 51234, "waiting for the browser");
+        });
+
+        // The writer is non-blocking, so the line is still in the channel until
+        // the guard flushes it. Dropping it here is the flush.
+        drop(guard);
+
+        let written = std::fs::read_dir(&dir)
+            .expect("log dir")
+            .filter_map(|e| e.ok())
+            .map(|e| std::fs::read_to_string(e.path()).unwrap_or_default())
+            .collect::<String>();
+
+        assert!(
+            written.contains("waiting for the browser") && written.contains("51234"),
+            "log file did not contain the line: {written:?}"
+        );
+        // A file somebody pastes into a bug report must not be full of escapes.
+        assert!(!written.contains('\u{1b}'), "ANSI escapes leaked into the file");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

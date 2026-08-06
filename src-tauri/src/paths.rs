@@ -126,6 +126,13 @@ pub fn config_path() -> PathBuf {
     launcher_directory().join("config.json")
 }
 
+/// Where the rolling launcher log is written. Beside the config rather than in
+/// the instance tree, because it describes the launcher rather than any one
+/// server and must survive a server being removed.
+pub fn log_directory() -> PathBuf {
+    launcher_directory().join("logs")
+}
+
 /// Pre-2.0 config location, migrated on first load if present.
 pub fn legacy_config_path() -> PathBuf {
     default_data_directory().join("config.json")

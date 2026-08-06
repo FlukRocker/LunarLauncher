@@ -1664,7 +1664,50 @@ pub fn export_diagnostics(
         }
     }
 
+    // The launcher's own log, which is a different thing from the game's: a
+    // sign-in that never came back, or a module download that failed, leaves
+    // nothing in the game output because the game never started. On Windows
+    // this file is the only copy — the process has no console to print to.
+    let _ = writeln!(r, "\n-- launcher log (last {LAUNCHER_LOG_LINES} lines) --");
+    match latest_launcher_log() {
+        Some(text) => {
+            let lines: Vec<&str> = text.lines().collect();
+            for line in lines.iter().skip(lines.len().saturating_sub(LAUNCHER_LOG_LINES)) {
+                let _ = writeln!(r, "{line}");
+            }
+        }
+        None => {
+            let _ = writeln!(
+                r,
+                "(no log file yet — expected under {})",
+                crate::paths::log_directory().display()
+            );
+        }
+    }
+
     Ok(r)
+}
+
+const LAUNCHER_LOG_LINES: usize = 300;
+
+/// The newest rolling log file's contents, if there is one.
+///
+/// Picked by filename rather than mtime: the appender's suffix is the date, so
+/// the names sort chronologically, and an mtime can be rewritten by a backup
+/// tool or a file copy in a way the name cannot.
+fn latest_launcher_log() -> Option<String> {
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(crate::paths::log_directory())
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("launcher."))
+        })
+        .collect();
+    files.sort();
+    std::fs::read_to_string(files.last()?).ok()
 }
 
 /// Which loader a server's distribution declares.
