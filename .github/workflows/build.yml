@@ -74,6 +74,16 @@ jobs:
       - name: Build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required because bundle.createUpdaterArtifacts is on: the bundler
+          # finds a public key in tauri.conf.json and refuses to produce an
+          # unsigned update artifact next to it. Without the secret this step
+          # fails with "a public key has been found, but no private key",
+          # which reads like a config error rather than a missing secret.
+          #
+          # The private key never enters the repository. Anyone holding it can
+          # sign an update that every installed launcher will trust and run.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run app:build -- --target ${{ matrix.target }}
 
       # Without this the installers are built and then discarded with the
