@@ -481,7 +481,20 @@ mod forge_tests {
     fn forge_placeholders_are_substituted() {
         let jvm = profile().jvm_args.join(" ");
         assert!(!jvm.contains("${"), "left unsubstituted: {jvm}");
-        assert!(jvm.contains("/c/libraries/cpw/mods/modlauncher/8.0.9/modlauncher-8.0.9.jar"));
+
+        // Built with `join` rather than written as a literal: the substituted
+        // value carries the platform separator, so a hardcoded POSIX path
+        // passes on macOS and fails on Windows — which is exactly how this
+        // test first went red, in CI rather than here.
+        let expected: std::path::PathBuf = ["/c", "libraries", "cpw", "mods", "modlauncher", "8.0.9"]
+            .iter()
+            .collect();
+        let expected = expected.join("modlauncher-8.0.9.jar");
+        assert!(
+            jvm.contains(&*expected.to_string_lossy()),
+            "expected {} in {jvm}",
+            expected.display()
+        );
         assert!(jvm.contains("-DlegacyClassPath.file=1.16.5-forge-36.2.34.txt"));
     }
 
