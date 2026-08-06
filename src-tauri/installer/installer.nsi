@@ -419,8 +419,24 @@ Var AppStartMenuFolder
 !define LUNAR_DIM 0x93A8AD
 !define LUNAR_PB_BG 0x0A0705      ; COLORREF of #05070a
 !define LUNAR_PB_BAR 0x7AD935     ; COLORREF of #35d97a
-!define PBM_SETBARCOLOR 0x0409
-!define PBM_SETBKCOLOR 0x2001
+; Guarded, because whether these are already defined depends on the NSIS
+; version rather than on anything in this file.
+;
+; Both versions ship them in `WinMessages.nsh`; what differs is whether that
+; header is reached. **3.11's `Modern UI 2/MUI2.nsh` includes WinMessages.nsh
+; and 3.08's does not** — so the `!include MUI2.nsh` above pulls the
+; definitions in on 3.11 only, and a redefinition there is a hard
+; `!define: "PBM_SETBARCOLOR" already defined!` abort rather than a warning.
+;
+; Unguarded, that is a build which passes locally and fails in CI on the same
+; commit: a Linux builder with Debian's nsis package (3.08) never downloads
+; anything, while a Windows runner has no makensis and fetches 3.11.
+!ifndef PBM_SETBARCOLOR
+  !define PBM_SETBARCOLOR 0x0409
+!endif
+!ifndef PBM_SETBKCOLOR
+  !define PBM_SETBKCOLOR 0x2001
+!endif
 
 !define MUI_PAGE_HEADER_TEXT "Installing ${PRODUCTNAME}"
 !define MUI_PAGE_HEADER_SUBTEXT "This takes a few seconds."
@@ -465,7 +481,9 @@ Function LunarBrandInstallPage
   ; The details list is extraction log output. Useful when debugging a failed
   ; install, meaningless to a player, and the single biggest thing making this
   ; look like a 2003 setup wizard. 0 is SW_HIDE, written literally because
-  ; WinMessages.nsh is not included here.
+  ; whether `WinMessages.nsh` has been reached depends on the NSIS version —
+  ; 3.11 pulls it in through MUI2.nsh and 3.08 does not (see the PBM_ guard
+  ; above). The literal works on both; the named constant would not.
   GetDlgItem $0 $1 1016
   ${If} $0 <> 0
     ShowWindow $0 0
