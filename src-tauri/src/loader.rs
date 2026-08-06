@@ -482,19 +482,19 @@ mod forge_tests {
         let jvm = profile().jvm_args.join(" ");
         assert!(!jvm.contains("${"), "left unsubstituted: {jvm}");
 
-        // Built with `join` rather than written as a literal: the substituted
-        // value carries the platform separator, so a hardcoded POSIX path
-        // passes on macOS and fails on Windows — which is exactly how this
-        // test first went red, in CI rather than here.
-        let expected: std::path::PathBuf = ["/c", "libraries", "cpw", "mods", "modlauncher", "8.0.9"]
-            .iter()
-            .collect();
-        let expected = expected.join("modlauncher-8.0.9.jar");
-        assert!(
-            jvm.contains(&*expected.to_string_lossy()),
-            "expected {} in {jvm}",
-            expected.display()
+        // Only the placeholder carries a platform separator — it comes from
+        // `Path::join`. Everything after it is verbatim from Forge's JSON,
+        // which uses forward slashes. Windows therefore yields a genuinely
+        // mixed path, `/c\\libraries/cpw/mods/...`, which it accepts. Derived
+        // here the same way the code derives it, rather than written out,
+        // because guessing that shape wrong is what made this test fail on
+        // Windows twice.
+        let lib_dir = std::path::Path::new("/c").join("libraries");
+        let expected = format!(
+            "{}/cpw/mods/modlauncher/8.0.9/modlauncher-8.0.9.jar",
+            lib_dir.to_string_lossy()
         );
+        assert!(jvm.contains(&expected), "expected {expected} in {jvm}");
         assert!(jvm.contains("-DlegacyClassPath.file=1.16.5-forge-36.2.34.txt"));
     }
 
