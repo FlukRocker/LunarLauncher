@@ -48,13 +48,14 @@
         "installerIcon": "icons/icon.ico",
         "headerImage": "installer/header.bmp",
         "sidebarImage": "installer/sidebar.bmp",
-        "installMode": "both",
+        "installMode": "currentUser",
         "languages": [
           "English"
         ],
         "displayLanguageSelector": false,
         "startMenuFolder": "Lunar Launcher",
-        "compression": "lzma"
+        "compression": "lzma",
+        "template": "installer/installer.nsi"
       }
     }
   },
