@@ -12,12 +12,17 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::paths;
 
-/// Remote distribution index, carried over from distromanager.js.
+/// Remote distribution index.
 ///
-/// NOTE: this host is stale — it no longer resolves. Override it with
-/// `LUNAR_DISTRO_URL` until the new one is set here.
-pub const REMOTE_DISTRO_URL: &str =
-    "https://hermes-mc.net/downloads/lunarpixel/distribution.json";
+/// **This is a LAN test address, not a shipping default.** It points at a
+/// controller on the local network; a build handed to anyone else will fail to
+/// load a distribution at all. Set it to the real public host before release.
+///
+/// It replaced `https://hermes-mc.net/downloads/lunarpixel/distribution.json`,
+/// which was carried over from distromanager.js and no longer resolves — so the
+/// launcher failed at startup with a DNS error unless `LUNAR_DISTRO_URL` was
+/// set, which a GUI app started from Explorer never sees.
+pub const REMOTE_DISTRO_URL: &str = "http://192.168.1.115:8080/d/acme/distribution.json";
 
 /// Environment override for the distribution source.
 ///

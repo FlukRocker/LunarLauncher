@@ -47,8 +47,9 @@
     "updater": {
       "active": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCREVBQUY0RDhFRjkxN0YKUldSL2tlL1k5S3JlYS9xZ1k2S1ZhUjJ2Y1hreGd3WlQ1dHBxbm4wR2FlTVFOZWFCanlvSFdsWWYK",
+      "dangerousInsecureTransportProtocol": true,
       "endpoints": [
-        "https://REPLACE-WITH-YOUR-HOST/updates/{{target}}/{{current_version}}"
+        "http://192.168.1.115:8080/updates/{{target}}/{{current_version}}"
       ]
     }
   }
