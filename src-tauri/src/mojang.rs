@@ -17,9 +17,13 @@ pub const DEFAULT_AUTH_SERVER: &str = "https://authserver.mojang.com";
 /// Environment override, mirroring how the distribution URL is handled.
 pub const AUTH_SERVER_ENV: &str = "LUNAR_AUTH_SERVER";
 
+/// Runtime environment, then the build-time value, then the default. Same
+/// chain as the distribution URL; see `DistroSource::resolve`.
 pub fn auth_server() -> String {
     std::env::var(AUTH_SERVER_ENV)
         .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| option_env!("LUNAR_AUTH_SERVER").map(str::to_string))
         .filter(|v| !v.trim().is_empty())
         .map(|v| v.trim().trim_end_matches('/').to_string())
         .unwrap_or_else(|| DEFAULT_AUTH_SERVER.to_string())

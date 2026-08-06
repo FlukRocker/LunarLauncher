@@ -17,6 +17,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
  */
 const isMac = navigator.userAgent.includes('Mac')
 
+// Substituted at build time from LUNAR_BRAND_NAME; see vite.config.ts. The
+// Windows titlebar draws its own title, so a branded build would otherwise
+// still say "Lunar Launcher" in the one place the user always sees.
+declare const __BRAND_NAME__: string
+
 export function Frame() {
     const win = getCurrentWindow()
 
@@ -58,7 +63,7 @@ export function Frame() {
                 ) : (
                     <div id="frameContentWin" data-tauri-drag-region>
                         <div id="frameTitleDock" data-tauri-drag-region>
-                            <span id="frameTitleText">Lunar Launcher</span>
+                            <span id="frameTitleText">{__BRAND_NAME__}</span>
                         </div>
                         <div id="frameButtonDockWin">
                             <button

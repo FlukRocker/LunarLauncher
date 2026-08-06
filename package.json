@@ -11,7 +11,10 @@
     "app:dev": "tauri dev",
     "app:build": "tauri build",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "brand": "node scripts/brand.mjs",
+    "app:build:branded": "npm run brand && tauri build --config src-tauri/tauri.brand.json",
+    "app:dev:branded": "npm run brand && tauri dev --config src-tauri/tauri.brand.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

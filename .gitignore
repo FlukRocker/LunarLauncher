@@ -11,3 +11,11 @@ src-tauri/gen/
 # and execute. It lives outside the tree; CI signs from a secret.
 *.key
 *.key.pub
+
+# Build-time configuration. `.env.example` is the documented template; the
+# real files carry per-customer endpoints and are never committed.
+.env
+.env.local
+.env.*.local
+# Generated from the environment by scripts/brand.mjs on every branded build.
+src-tauri/tauri.brand.json

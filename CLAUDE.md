@@ -21,6 +21,8 @@ npm install
 npm run app:dev                    # vite + tauri, hot reload
 npm run app:build                  # production build with installers
 npm run app:build -- --no-bundle   # production binary only, much faster
+npm run brand                      # write the tauri config patch from .env
+npm run app:build:branded          # branded build (see Build-time configuration)
 npm run test:rust                  # cargo test
 npm run lint                       # tsc --noEmit
 
@@ -28,6 +30,38 @@ npm run lint                       # tsc --noEmit
 cargo test --manifest-path src-tauri/Cargo.toml <name>
 cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture
 ```
+
+### Build-time configuration
+
+`.env` (git-ignored; `.env.example` is the template) feeds three consumers,
+all with the same precedence — real environment, then `.env.local`, then
+`.env`:
+
+- **`build.rs`** bakes the values in `BAKED` into the binary via
+  `cargo:rustc-env`, so `option_env!("LUNAR_DISTRO_URL")` sees them. This is
+  what lets a controller-built launcher work on a customer's machine, where
+  nothing sets an environment variable.
+- **`scripts/brand.mjs`** writes `src-tauri/tauri.brand.json`, a config patch
+  Tauri deep-merges over `tauri.conf.json`. It covers what `option_env!`
+  cannot reach: product name, bundle identifier, version, updater endpoint,
+  icons. `npm run app:build:branded`.
+- **`vite.config.ts`** substitutes `__BRAND_NAME__` into the frontend, so the
+  Windows titlebar follows the brand.
+
+Runtime still wins over baked, so a branded build can be pointed at a staging
+index without rebuilding. The exception is `LUNAR_AZURE_CLIENT_ID`, which is
+build-time only — it identifies the application to Microsoft, and a stray
+environment variable should not change who the user consents to.
+
+`brand.mjs` fails the build rather than falling back on anything invalid: an
+unattended per-customer build that quietly shipped as "Lunar Launcher" would
+look entirely correct. It also refuses an updater endpoint with no public key,
+which would otherwise install whatever that endpoint returned.
+
+Debug builds also read `.env` at *startup*, which is what makes
+`npm run app:dev` work without exporting anything. Release builds ignore a
+stray `.env` unless `LUNAR_ENV_FILE` names one, since a dropped file could
+otherwise repoint a shipped launcher at another distribution index.
 
 ### Two traps worth knowing before you debug anything
 

@@ -2,6 +2,11 @@ pub mod commands;
 pub mod config;
 pub mod discord;
 pub mod distribution;
+/// `.env` parsing and application.
+///
+/// Shared verbatim with `build.rs` via `include!`, so that a variable behaves
+/// the same whether it is baked in at build time or read at startup.
+pub mod env_file;
 pub mod dl;
 pub mod java;
 pub mod loader;
@@ -63,8 +68,43 @@ where
     Ok((layer, guard))
 }
 
+/// Apply a `.env` before anything reads the environment.
+///
+/// Debug builds pick up `.env.local` then `.env` from the working directory,
+/// which is what makes `npm run app:dev` usable without exporting
+/// `LUNAR_DISTRO_URL` by hand every time.
+///
+/// Release builds do **not**, unless `LUNAR_ENV_FILE` names a file
+/// explicitly. A shipped launcher that silently honoured a `.env` sitting
+/// next to it could be repointed at another distribution index — that is a
+/// download-and-execute path, so it takes a deliberate act, not a dropped
+/// file.
+fn load_env_file() {
+    let explicit = std::env::var_os("LUNAR_ENV_FILE").map(std::path::PathBuf::from);
+
+    let candidates: Vec<std::path::PathBuf> = match explicit {
+        Some(path) => vec![path],
+        None if cfg!(debug_assertions) => {
+            vec![".env.local".into(), ".env".into()]
+        }
+        None => return,
+    };
+
+    for path in candidates {
+        let applied = env_file::apply(&path);
+        if !applied.is_empty() {
+            // Printed rather than traced: the subscriber is not installed yet,
+            // and knowing which file moved a setting is exactly what saves an
+            // hour when a build points somewhere unexpected.
+            println!("[env] {} applied {}", path.display(), applied.join(", "));
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    load_env_file();
+
     // Telemetry settings live in config.json, which the app has not loaded
     // yet, so read just that file here to decide whether to install the OTLP
     // layer. Any failure falls back to plain logging rather than blocking

@@ -46,10 +46,21 @@ impl DistroSource {
     ///
     /// Anything that isn't an `http(s)` URL is treated as a local path, with
     /// `file://` stripped if present.
+    /// Precedence: the runtime environment, then whatever was baked in at
+    /// build time, then the compiled-in default.
+    ///
+    /// The middle step is what makes a controller-built launcher work on a
+    /// customer's machine, where nothing sets `LUNAR_DISTRO_URL` — but the
+    /// runtime override still comes first, so a branded build can be pointed
+    /// at a staging index without rebuilding it.
     pub fn resolve() -> Self {
+        let baked = option_env!("LUNAR_DISTRO_URL");
         match std::env::var(DISTRO_URL_ENV) {
             Ok(value) if !value.trim().is_empty() => Self::parse(value.trim()),
-            _ => Self::Remote(REMOTE_DISTRO_URL.to_string()),
+            _ => match baked.map(str::trim).filter(|v| !v.is_empty()) {
+                Some(value) => Self::parse(value),
+                None => Self::Remote(REMOTE_DISTRO_URL.to_string()),
+            },
         }
     }
 

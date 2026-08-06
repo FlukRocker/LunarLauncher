@@ -21,7 +21,15 @@ use crate::error::{Error, Result};
 ///
 /// Third parties forking this launcher must register their own; see
 /// docs/MicrosoftAuth.md.
-pub const AZURE_CLIENT_ID: &str = "9a6ec02d-485d-4be9-b7f1-454a56b546ad";
+/// Overridable at build time so a controller-built launcher can ship a
+/// customer's own Azure registration. Not overridable at *runtime*: the
+/// client id is half of what identifies this application to Microsoft, and
+/// letting a stray environment variable swap it would change who the user is
+/// consenting to.
+pub const AZURE_CLIENT_ID: &str = match option_env!("LUNAR_AZURE_CLIENT_ID") {
+    Some(id) => id,
+    None => "9a6ec02d-485d-4be9-b7f1-454a56b546ad",
+};
 
 pub const REDIRECT_URI: &str =
     "https://login.microsoftonline.com/common/oauth2/nativeclient";
