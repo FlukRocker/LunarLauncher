@@ -1,6 +1,13 @@
 MIT License
 
 Copyright (c) 2017-2026 Daniel D. Scalzi
+Copyright (c) 2026 Cyber Network Group
+
+This software is a derivative of HeliosLauncher
+(https://github.com/dscalzi/HeliosLauncher) by Daniel D. Scalzi, ported to
+Tauri and extended by Cyber Network Group. The first copyright line is
+retained because the MIT License requires it; the second is added alongside
+and does not supersede it.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

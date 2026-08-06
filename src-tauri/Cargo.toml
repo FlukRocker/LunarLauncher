@@ -2,7 +2,11 @@
 name = "lunarlauncher"
 version = "2.2.1"
 description = "Modded Minecraft Launcher"
-authors = ["FlukRocker"]
+authors = ["Cyber Network Group", "Daniel D. Scalzi"]
+# MIT, and it stays MIT: this is a derivative of HeliosLauncher, whose notice
+# LICENSE.txt retains because the licence requires it. Scalzi is credited as an
+# author because he wrote the work this is a port of.
+license = "MIT"
 edition = "2021"
 rust-version = "1.77"
 
