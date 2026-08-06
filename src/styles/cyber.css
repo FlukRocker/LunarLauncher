@@ -1,0 +1,497 @@
+/* Cyber Network design system.
+ *
+ * Ported from the artifact's token set rather than eyeballed, so a value here
+ * can be checked against the design instead of argued about. Only the tokens
+ * the first-run flow uses are present; the rest of the launcher still uses
+ * launcher.css and is deliberately untouched.
+ *
+ * `--cnm-radius: 0px` is not an oversight — nothing in this design has a
+ * rounded corner. Its corners are cut, not curved, which is what `clip-path`
+ * below is for.
+ */
+
+:root {
+    --cnm-bg: #05070a;
+    --cnm-bg-1: #080b11;
+    --cnm-bg-2: #0d1219;
+
+    --cnm-emerald: #35d97a;
+    --cnm-diamond: #3fd8f0;
+    --cnm-gold: #ffb52e;
+    --cnm-redstone: #ff3d4f;
+
+    --cnm-ink: #e9f4f4;
+    --cnm-ink-dim: #93a8ad;
+    --cnm-ink-mute: #5b6d75;
+    --cnm-text-invert: #04070a;
+
+    --cnm-line: rgba(110, 200, 180, 0.16);
+    --cnm-line-strong: rgba(110, 200, 180, 0.3);
+    --cnm-line-cold: rgba(63, 216, 240, 0.4);
+    --cnm-line-hot: rgba(53, 217, 122, 0.42);
+
+    --cnm-surface-inset: rgba(4, 7, 10, 0.7);
+    --cnm-panel-solid: #0b1218;
+
+    --cnm-grad: linear-gradient(115deg, var(--cnm-diamond) 0%, var(--cnm-emerald) 48%, var(--cnm-gold) 100%);
+    --cnm-glow-emerald: 0 0 18px rgba(53, 217, 122, 0.45);
+    --cnm-grid-fx: linear-gradient(rgba(110, 200, 180, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(110, 200, 180, 0.055) 1px, transparent 1px);
+    --cnm-scanlines: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.015) 0px,
+        rgba(255, 255, 255, 0.015) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+
+    --cnm-clip-btn: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+    --cnm-dur: 0.25s;
+    --cnm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+    --cnm-font-display: 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+    --cnm-font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --cnm-font-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.cyber {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--cnm-bg);
+    /* Layered exactly as the design stacks them: scanlines over grid over
+       ground. Both are decoration and must never take pointer events. */
+    background-image: var(--cnm-scanlines), var(--cnm-grid-fx);
+    background-size: auto, 8px 8px, 8px 8px;
+    z-index: 50;
+}
+
+.cyber__frame {
+    width: 820px;
+    max-width: calc(100% - 40px);
+    max-height: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--cnm-line);
+    background: linear-gradient(180deg, rgba(13, 18, 25, 0.97), rgba(5, 7, 10, 0.99));
+    box-shadow: 0 50px 140px rgba(0, 0, 0, 0.82);
+}
+
+/* --------------------------------------------------------------- header -- */
+
+.cyber__header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 56px;
+    padding: 0 24px;
+    flex: none;
+    border-bottom: 1px solid var(--cnm-line);
+}
+
+.cyber__mark {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    background: var(--cnm-grad);
+    box-shadow: var(--cnm-glow-emerald);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--cnm-font-mono);
+    font-size: 0.52rem;
+    font-weight: 700;
+    color: var(--cnm-text-invert);
+}
+
+.cyber__brand {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cyber__brandName {
+    font-family: var(--cnm-font-display);
+    font-weight: 700;
+    font-size: 0.88rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cnm-ink);
+    line-height: 1;
+}
+
+.cyber__brandSub {
+    font-family: var(--cnm-font-mono);
+    font-size: 0.52rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+    line-height: 1;
+}
+
+.cyber__pill {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--cnm-line);
+    font-family: var(--cnm-font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-dim);
+}
+
+.cyber__dot {
+    width: 6px;
+    height: 6px;
+    background: var(--cnm-emerald);
+    box-shadow: var(--cnm-glow-emerald);
+}
+
+.cyber__dot--off {
+    background: var(--cnm-ink-mute);
+    box-shadow: none;
+}
+
+/* ----------------------------------------------------------------- rail -- */
+
+.cyber__rail {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 52px;
+    padding: 0 24px;
+    flex: none;
+    border-bottom: 1px solid var(--cnm-line);
+    background: rgba(4, 7, 10, 0.45);
+    overflow-x: auto;
+}
+
+.cyber__step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-right: 14px;
+    flex: none;
+}
+
+.cyber__chev {
+    display: flex;
+    align-items: center;
+    padding-right: 12px;
+    color: var(--cnm-ink-mute);
+}
+
+.cyber__num {
+    width: 24px;
+    height: 24px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--cnm-font-mono);
+    font-size: 0.58rem;
+    font-weight: 700;
+    border: 1px solid var(--cnm-line);
+    background: rgba(4, 7, 10, 0.6);
+    color: var(--cnm-ink-mute);
+}
+
+.cyber__step--current .cyber__num {
+    background: var(--cnm-grad);
+    border-color: transparent;
+    color: var(--cnm-text-invert);
+    box-shadow: 0 0 14px rgba(53, 217, 122, 0.4);
+}
+
+.cyber__step--done .cyber__num {
+    border-color: var(--cnm-line-hot);
+    background: rgba(53, 217, 122, 0.12);
+    color: var(--cnm-emerald);
+}
+
+.cyber__stepName {
+    font-family: var(--cnm-font-display);
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+    white-space: nowrap;
+}
+
+.cyber__step--current .cyber__stepName {
+    font-weight: 700;
+    color: var(--cnm-ink);
+}
+
+.cyber__step--done .cyber__stepName {
+    color: var(--cnm-ink-dim);
+}
+
+.cyber__counter {
+    margin-left: auto;
+    padding-left: 16px;
+    font-family: var(--cnm-font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+    white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- body -- */
+
+.cyber__body {
+    height: 326px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.cyber__eyebrow {
+    font-family: var(--cnm-font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--cnm-diamond);
+}
+
+.cyber__title {
+    font-family: var(--cnm-font-display);
+    font-weight: 700;
+    font-size: 1.35rem;
+    line-height: 1.06;
+    text-transform: uppercase;
+    color: var(--cnm-ink);
+    margin: 10px 0 0;
+}
+
+.cyber__inset {
+    margin-top: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    border: 1px solid var(--cnm-line);
+    background: var(--cnm-surface-inset);
+    padding: 14px 16px;
+}
+
+.cyber__p {
+    font-family: var(--cnm-font-body);
+    font-size: 0.74rem;
+    line-height: 1.65;
+    color: var(--cnm-ink-dim);
+    margin: 9px 0 0;
+}
+
+.cyber__p:first-child {
+    margin-top: 0;
+}
+
+.cyber__p strong {
+    color: var(--cnm-ink);
+}
+
+.cyber__monoLabel {
+    font-family: var(--cnm-font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cnm-diamond);
+}
+
+/* --------------------------------------------------------------- choice -- */
+
+.cyber__check {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-top: 14px;
+    flex: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+}
+
+.cyber__box {
+    width: 17px;
+    height: 17px;
+    flex: none;
+    border: 1px solid var(--cnm-line-strong);
+    background: rgba(4, 7, 10, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cnm-text-invert);
+}
+
+/* The tick is drawn in --cnm-text-invert, which is near-black — legible only
+   once the box carries the gradient. Without this the box reads as empty and
+   the selected row is signalled by a very faint highlight alone. */
+.cyber__box--on,
+.cyber__check[aria-checked='true'] .cyber__box {
+    background: var(--cnm-grad);
+    border-color: transparent;
+    box-shadow: 0 0 14px rgba(53, 217, 122, 0.35);
+}
+
+.cyber__checkText {
+    font-family: var(--cnm-font-body);
+    font-size: 0.77rem;
+    color: var(--cnm-ink-dim);
+}
+
+.cyber__check[aria-checked='true'] .cyber__checkText {
+    color: var(--cnm-ink);
+}
+
+.cyber__row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 9px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--cnm-line);
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    transition: background var(--cnm-dur-fast, 0.2s) var(--cnm-ease);
+}
+
+.cyber__row:hover {
+    background: rgba(53, 217, 122, 0.06);
+}
+
+.cyber__row--active {
+    background: rgba(53, 217, 122, 0.1);
+}
+
+.cyber__rowName {
+    font-family: var(--cnm-font-body);
+    font-size: 0.78rem;
+    color: var(--cnm-ink);
+}
+
+.cyber__rowMeta {
+    margin-left: auto;
+    font-family: var(--cnm-font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+    white-space: nowrap;
+}
+
+.cyber__kv {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--cnm-line);
+}
+
+.cyber__k {
+    font-family: var(--cnm-font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+    width: 150px;
+    flex: none;
+}
+
+.cyber__v {
+    font-family: var(--cnm-font-body);
+    font-size: 0.76rem;
+    color: var(--cnm-ink);
+    word-break: break-all;
+}
+
+/* --------------------------------------------------------------- footer -- */
+
+.cyber__footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 64px;
+    padding: 0 24px;
+    flex: none;
+    border-top: 1px solid var(--cnm-line);
+    background: rgba(4, 7, 10, 0.45);
+}
+
+.cyber__hint {
+    font-family: var(--cnm-font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cnm-ink-mute);
+}
+
+.cyber__btn {
+    margin-left: 0;
+    height: 36px;
+    padding: 0 20px;
+    border: 1px solid var(--cnm-line-strong);
+    background: rgba(4, 7, 10, 0.6);
+    color: var(--cnm-ink-dim);
+    font-family: var(--cnm-font-display);
+    font-weight: 600;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    clip-path: var(--cnm-clip-btn);
+    transition: color var(--cnm-dur) var(--cnm-ease), border-color var(--cnm-dur) var(--cnm-ease);
+}
+
+.cyber__btn:hover:not(:disabled) {
+    border-color: var(--cnm-line-cold);
+    color: var(--cnm-diamond);
+}
+
+.cyber__btn--primary {
+    margin-left: auto;
+    border-color: transparent;
+    background: var(--cnm-grad);
+    color: var(--cnm-text-invert);
+    font-weight: 700;
+    box-shadow: 0 8px 26px rgba(53, 217, 122, 0.28);
+}
+
+.cyber__btn--primary:hover:not(:disabled) {
+    color: var(--cnm-text-invert);
+    box-shadow: 0 12px 38px rgba(53, 217, 122, 0.45);
+}
+
+.cyber__btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.cyber__spacer {
+    margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cyber__btn,
+    .cyber__row {
+        transition: none;
+    }
+}

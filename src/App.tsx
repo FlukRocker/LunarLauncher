@@ -18,7 +18,7 @@ import { Landing } from './views/Landing'
 import { Loading } from './views/Loading'
 import { Settings } from './views/Settings'
 import { LoginOptions } from './views/LoginOptions'
-import { Welcome } from './views/Welcome'
+import { FirstRun } from './views/FirstRun'
 
 /**
  * The views the launcher can show.
@@ -162,7 +162,7 @@ export function App() {
             )}
             <main id="main">
                 {view === 'loading' && <Loading />}
-                {view === 'welcome' && <Welcome onContinue={() => setView('loginOptions')} />}
+                {view === 'welcome' && <FirstRun onDone={() => setView('loginOptions')} />}
                 {view === 'loginOptions' && (
                     <LoginOptions
                         onLoggedIn={() => {
