@@ -46,10 +46,10 @@
   "plugins": {
     "updater": {
       "active": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCREVBQUY0RDhFRjkxN0YKUldSL2tlL1k5S3JlYS9xZ1k2S1ZhUjJ2Y1hreGd3WlQ1dHBxbm4wR2FlTVFOZWFCanlvSFdsWWYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ5RDg3OTYyQTg5M0QwNzIKUldSeTBKT29Zbm5ZMmQ0OWhsTUpFQzlDVit2VVE4WTdxRzJ1RWxJSHp5QStVYktJTnkzdkt3US8K",
       "dangerousInsecureTransportProtocol": true,
       "endpoints": [
-        "http://192.168.1.115:8080/updates/{{target}}/{{current_version}}"
+        "http://192.168.1.115:8080/updates/{{target}}-{{arch}}/{{current_version}}"
       ]
     }
   }
