@@ -225,6 +225,7 @@ pub fn run() {
             commands::get_game_log,
             commands::clear_game_log,
             commands::export_diagnostics,
+            commands::get_server_icon,
             commands::get_pending_update,
             commands::install_update,
             commands::dismiss_update,

@@ -34,6 +34,9 @@ pub struct AppState {
     /// The file-log writer guard, parked here so the install path can flush it
     /// before the installer terminates the process. See `updater.rs`.
     pub log_guard: std::sync::Arc<std::sync::Mutex<Option<tracing_appender::non_blocking::WorkerGuard>>>,
+    /// Server icons, already encoded as `data:` URIs. `None` means the server
+    /// has no usable icon and asking again would not help.
+    pub server_icons: tokio::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
 }
 
 impl AppState {
@@ -48,6 +51,7 @@ impl AppState {
             pending_update: std::sync::Mutex::new(None),
             update_installing: std::sync::atomic::AtomicBool::new(false),
             log_guard: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            server_icons: tokio::sync::Mutex::new(std::collections::HashMap::new()),
         }
     }
 }
@@ -1765,5 +1769,134 @@ pub async fn install_update(app: tauri::AppHandle, state: State<'_, AppState>) -
 pub fn dismiss_update(state: State<'_, AppState>) {
     if state.pending_update.lock().unwrap().take().is_some() {
         tracing::info!("Update declined for this session");
+    }
+}
+
+// --- Server icons ---------------------------------------------------------
+
+/// Largest icon worth inlining. A pack icon is a few tens of kilobytes; this
+/// only exists so a hostile or broken index cannot make the launcher hold an
+/// arbitrary download in memory and hand it to the webview.
+const MAX_ICON_BYTES: usize = 2 * 1024 * 1024;
+
+/// A server's icon as a `data:` URI, or `None` if it has none.
+///
+/// Fetched here rather than by the webview for two reasons. The content
+/// security policy allows `https:` images but not plain `http:`, and a
+/// controller on a LAN address is `http:` — so an `<img src>` pointing at it
+/// would fail silently, with nothing but a console entry to say why. And the
+/// distribution is untrusted input: letting it name a URL the webview then
+/// requests turns the index into a way to make the launcher beacon anywhere.
+/// Going through Rust keeps the policy tight instead of widening `img-src`.
+#[tauri::command]
+pub async fn get_server_icon(
+    state: State<'_, AppState>,
+    server_id: String,
+) -> Result<Option<String>> {
+    if let Some(cached) = state.server_icons.lock().await.get(&server_id) {
+        return Ok(cached.clone());
+    }
+
+    let url = {
+        let guard = state.distribution.lock().unwrap();
+        guard
+            .as_ref()
+            .and_then(|d| d.server_by_id(&server_id))
+            .map(|s| s.icon.trim().to_string())
+            .unwrap_or_default()
+    };
+
+    let resolved = resolve_icon(&url).await;
+    if resolved.is_none() && !url.is_empty() {
+        tracing::debug!(%server_id, %url, "no usable icon for server");
+    }
+    state
+        .server_icons
+        .lock()
+        .await
+        .insert(server_id, resolved.clone());
+    Ok(resolved)
+}
+
+async fn resolve_icon(url: &str) -> Option<String> {
+    if url.is_empty() {
+        return None;
+    }
+    // Already inline: pass through rather than fetching a URL that is not one.
+    if url.starts_with("data:image/") {
+        return Some(url.to_string());
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        tracing::warn!(%url, "server icon is not an http(s) or data URL; ignoring");
+        return None;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let response = client.get(url).send().await.ok()?;
+    if !response.status().is_success() {
+        tracing::warn!(%url, status = %response.status(), "server icon fetch failed");
+        return None;
+    }
+
+    // The declared type decides the data URI's, so a response claiming to be
+    // HTML must not be relabelled as an image and handed to the webview.
+    let mime = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap_or(v).trim().to_string())
+        .unwrap_or_default();
+    if !mime.starts_with("image/") {
+        tracing::warn!(%url, %mime, "server icon is not an image; ignoring");
+        return None;
+    }
+
+    let bytes = response.bytes().await.ok()?;
+    if bytes.len() > MAX_ICON_BYTES {
+        tracing::warn!(%url, size = bytes.len(), "server icon is too large; ignoring");
+        return None;
+    }
+
+    use base64::Engine as _;
+    Some(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
+}
+
+#[cfg(test)]
+mod server_icon_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn an_empty_icon_is_none_rather_than_a_broken_image() {
+        assert!(resolve_icon("").await.is_none());
+    }
+
+    /// An index is fetched over the network, so its `icon` is attacker-chosen
+    /// input. `file:` would read off the user's disk into the webview.
+    #[tokio::test]
+    async fn non_http_schemes_are_refused() {
+        for url in ["file:///etc/passwd", "javascript:alert(1)", "ftp://x.test/a.png"] {
+            assert!(resolve_icon(url).await.is_none(), "{url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_inline_image_passes_through_unfetched() {
+        let uri = "data:image/png;base64,iVBORw0KGgo=";
+        assert_eq!(resolve_icon(uri).await.as_deref(), Some(uri));
+    }
+
+    /// `data:text/html` is still a data URL, and echoing it back would put
+    /// attacker markup where the UI expects an image source.
+    #[tokio::test]
+    async fn a_non_image_data_url_is_refused() {
+        assert!(resolve_icon("data:text/html,<script>alert(1)</script>")
+            .await
+            .is_none());
     }
 }

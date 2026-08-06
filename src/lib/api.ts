@@ -421,3 +421,17 @@ export const updateApi = {
     /** Decline for this session. The next start checks again. */
     dismiss: () => invoke<void>('dismiss_update')
 }
+
+// --- Server icons ---------------------------------------------------------
+
+/**
+ * A server's icon as a `data:` URI, or null when it has none.
+ *
+ * Fetched in Rust rather than with an `<img src>` pointing at the
+ * distribution's URL: the content security policy allows `https:` images but
+ * not plain `http:`, so a controller on a LAN address would fail silently.
+ * Results are cached for the session on the Rust side.
+ */
+export const iconApi = {
+    forServer: (serverId: string) => invoke<string | null>('get_server_icon', { serverId })
+}

@@ -821,7 +821,8 @@ img.mediaSVG {
 
 .serverPicker__item {
     display: flex;
-    align-items: baseline;
+    /* Was `baseline`, which the icon would sit on rather than align to. */
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     width: 100%;
@@ -896,4 +897,47 @@ img.mediaSVG {
         width: 100%;
         opacity: 0.4;
     }
+}
+
+/* Pack icons in the server picker. */
+.serverIcon {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    object-fit: cover;
+    /* Pack icons are usually opaque squares; the tint keeps one from reading
+       as a bright hole punched in a dark list. */
+    background-color: var(--surface);
+}
+
+/* The normal state for a distribution that publishes no icons — which is most
+   of them. A broken-image glyph here would read as a launcher fault rather
+   than an absent field. */
+.serverIcon--fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+/* Name over version, so the icon has a single text block to sit beside
+   instead of two competing baselines. */
+.serverPicker__text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+    margin-left: 10px;
+}
+
+.serverPicker__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }

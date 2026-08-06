@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ServerIcon } from '../components/ServerIcon'
 import { listen } from '@tauri-apps/api/event'
 import { ErrorModal, type LauncherError } from '../components/ErrorModal'
 import {
@@ -227,9 +228,12 @@ export function Landing({
                                                 )
                                         }}
                                     >
-                                        <span className="serverPicker__name">{s.name}</span>
-                                        <span className="serverPicker__meta">
-                                            {s.minecraftVersion}
+                                        <ServerIcon serverId={s.id} name={s.name} />
+                                        <span className="serverPicker__text">
+                                            <span className="serverPicker__name">{s.name}</span>
+                                            <span className="serverPicker__meta">
+                                                {s.minecraftVersion}
+                                            </span>
                                         </span>
                                     </button>
                                 </li>
