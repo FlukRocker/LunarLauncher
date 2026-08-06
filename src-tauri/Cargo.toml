@@ -43,6 +43,11 @@ dirs = "5"
 trash = "5"
 open = "5"
 sha1 = "0.10"
+chacha20poly1305 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+
+
 md-5 = "0.10"
 hex = "0.4"
 urlencoding = "2"
@@ -51,3 +56,13 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 discord-rich-presence = "0.2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# OS keystore for the token-encryption key. Native backends on macOS and
+# Windows need no system libraries; Linux goes through the Secret Service over
+# D-Bus, with the pure-Rust crypto backend so the build does not acquire an
+# OpenSSL dependency.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

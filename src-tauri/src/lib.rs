@@ -17,6 +17,7 @@ pub mod mods;
 pub mod mojang;
 pub mod news;
 pub mod paths;
+pub mod secrets;
 pub mod server_status;
 pub mod telemetry;
 pub mod process_builder;

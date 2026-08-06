@@ -114,6 +114,30 @@ that silently wipes the user's accounts and settings. This was a live bug found
 in testing. `electron_written_config_survives_a_round_trip` guards it; do not
 "simplify" those renames away.
 
+### Credentials are encrypted at rest
+
+`secrets.rs` seals the token fields of `config.json` with XChaCha20-Poly1305,
+under a key held in the OS keystore (Keychain / Credential Manager / Secret
+Service). Only credentials are sealed — username, uuid and display name stay
+readable so the account list renders even when the keystore does not answer.
+
+Read the module header before changing any of it; the threat model is stated
+there and is narrower than "tokens are safe". It defeats the file leaving the
+machine, not a program already running as the user.
+
+Three properties that are load-bearing:
+
+- **A value with no `enc:v1:` prefix is plaintext and still valid.** That is
+  what makes an Electron-era config migrate silently on the next save.
+- **A credential that will not decrypt is cleared; the account is not.** A
+  locked keychain is transient, and dropping accounts over it would repeat the
+  `minRAM` failure.
+- **No keystore means plaintext, not refusal.** Losing a config to an
+  over-eager safety check is worse than storing a token in the clear.
+
+`save()` seals a *clone*. Sealing the live config in place would leave memory
+holding ciphertext, and the next refresh would send it to Microsoft as a token.
+
 ### Launch flow
 
 `launch_game` in `commands.rs` is the whole path: resolve version → validate →

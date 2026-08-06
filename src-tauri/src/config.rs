@@ -150,7 +150,53 @@ pub enum Account {
     },
 }
 
+/// Apply `f` to every credential this account carries, with the context
+/// string that binds each ciphertext to its field.
+///
+/// Written as one walker used by both directions so a field cannot be
+/// encrypted on save but forgotten on load — which would present as a token
+/// that works until the first restart.
+fn for_each_secret(account: &mut Account, mut f: impl FnMut(&mut String, &str)) {
+    match account {
+        Account::Microsoft { access_token, microsoft, .. } => {
+            f(access_token, "accessToken");
+            f(&mut microsoft.access_token, "microsoft.accessToken");
+            f(&mut microsoft.refresh_token, "microsoft.refreshToken");
+        }
+        Account::Mojang { access_token, .. } => f(access_token, "accessToken"),
+        // Offline: the uuid is derived from the username and there is nothing
+        // to protect.
+        Account::Lunar { .. } => {}
+    }
+}
+
 impl Account {
+    /// Encrypt credentials for storage. Non-secret fields — username, uuid,
+    /// display name — stay readable so the account list still renders if the
+    /// keystore is later unavailable.
+    pub fn seal_secrets(&mut self) {
+        for_each_secret(self, |value, context| {
+            *value = crate::secrets::seal(value, context);
+        });
+    }
+
+    /// Decrypt credentials after loading.
+    ///
+    /// A value that cannot be opened is cleared rather than kept, so the
+    /// account re-authenticates instead of sending a ciphertext to Microsoft
+    /// as if it were a token. The account itself is never dropped: a locked
+    /// keychain is transient, and discarding accounts over it would repeat the
+    /// config-wiping failure this codebase has already had once.
+    pub fn unseal_secrets(&mut self) {
+        for_each_secret(self, |value, context| match crate::secrets::open(value, context) {
+            Ok(plain) => *value = plain,
+            Err(err) => {
+                tracing::warn!(%err, context, "Could not decrypt a stored credential; re-login required");
+                value.clear();
+            }
+        });
+    }
+
     pub fn uuid(&self) -> &str {
         match self {
             Account::Microsoft { uuid, .. }
@@ -372,7 +418,12 @@ impl ConfigManager {
             .map_err(Error::from)
             .and_then(|raw| serde_json::from_str::<Config>(&raw).map_err(Error::from))
         {
-            Ok(cfg) => cfg,
+            Ok(mut cfg) => {
+                for account in cfg.authentication_database.values_mut() {
+                    account.unseal_secrets();
+                }
+                cfg
+            }
             Err(err) => {
                 tracing::error!(%err, "Configuration file is malformed or corrupt; regenerating.");
                 Config::default()
@@ -391,10 +442,18 @@ impl ConfigManager {
         // so a user's config.json doesn't churn when switching between builds.
         // serde_json's to_string_pretty defaults to 2 spaces, hence the
         // explicit formatter.
+        // Sealed on a clone. Encrypting in place would leave the live config
+        // holding ciphertext, and the next launch would send it to Microsoft
+        // as a token.
+        let mut on_disk = config.clone();
+        for account in on_disk.authentication_database.values_mut() {
+            account.seal_secrets();
+        }
+
         let mut buf = Vec::new();
         let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
         let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
-        config.serialize(&mut ser)?;
+        on_disk.serialize(&mut ser)?;
         std::fs::write(&path, buf)?;
         Ok(())
     }
@@ -619,5 +678,130 @@ mod tests {
         assert!(j17.jvm_options.iter().any(|o| o == "-XX:+UseG1GC"));
         let j8 = default_java_config(8, None);
         assert!(j8.jvm_options.iter().any(|o| o == "-Xmn128M"));
+    }
+}
+
+#[cfg(test)]
+mod credential_encryption_tests {
+    use super::*;
+
+    fn microsoft_account() -> Account {
+        Account::Microsoft {
+            access_token: "mc-access-token".into(),
+            username: "steve@example.test".into(),
+            uuid: "abc123".into(),
+            display_name: "Steve".into(),
+            expires_at: "2027-01-01T00:00:00.000Z".into(),
+            microsoft: MicrosoftTokens {
+                access_token: "ms-access-token".into(),
+                refresh_token: "ms-refresh-token".into(),
+                expires_at: "2027-01-01T00:00:00.000Z".into(),
+            },
+        }
+    }
+
+    /// The claim the whole feature rests on: a config.json that leaves the
+    /// machine carries no usable credential. The refresh token is the one that
+    /// matters — it is long-lived and exchangeable without user interaction.
+    #[test]
+    fn a_saved_account_leaves_no_plaintext_credential_in_the_json() {
+        if !crate::secrets::available() {
+            eprintln!("no keystore on this host; skipping");
+            return;
+        }
+        let mut account = microsoft_account();
+        account.seal_secrets();
+        let json = serde_json::to_string(&account).unwrap();
+
+        for secret in ["mc-access-token", "ms-access-token", "ms-refresh-token"] {
+            assert!(!json.contains(secret), "{secret} survived into {json}");
+        }
+        // Non-secret fields stay readable, so the account list still renders
+        // even if the keystore later goes away.
+        assert!(json.contains("Steve"));
+        assert!(json.contains("abc123"));
+    }
+
+    #[test]
+    fn sealing_then_unsealing_returns_the_original_credentials() {
+        if !crate::secrets::available() {
+            return;
+        }
+        let mut account = microsoft_account();
+        account.seal_secrets();
+        account.unseal_secrets();
+
+        let Account::Microsoft { access_token, microsoft, .. } = &account else {
+            panic!("wrong variant");
+        };
+        assert_eq!(access_token, "mc-access-token");
+        assert_eq!(microsoft.access_token, "ms-access-token");
+        assert_eq!(microsoft.refresh_token, "ms-refresh-token");
+    }
+
+    /// Migration from an Electron-era config, where tokens are bare. They must
+    /// keep working; the next save is what encrypts them.
+    #[test]
+    fn a_legacy_plaintext_account_loads_unchanged() {
+        let mut account = microsoft_account();
+        account.unseal_secrets();
+        let Account::Microsoft { microsoft, .. } = &account else {
+            panic!("wrong variant");
+        };
+        assert_eq!(microsoft.refresh_token, "ms-refresh-token");
+    }
+
+    /// A config copied from another machine, or a keystore that was reset.
+    /// The token is cleared so the account re-authenticates — but the account
+    /// itself survives. Dropping it would repeat the config-wiping bug this
+    /// codebase already shipped once.
+    #[test]
+    fn an_undecryptable_credential_is_cleared_but_the_account_survives() {
+        if !crate::secrets::available() {
+            return;
+        }
+        let mut account = microsoft_account();
+        account.seal_secrets();
+
+        // Corrupt the sealed refresh token the way a foreign key would.
+        if let Account::Microsoft { microsoft, .. } = &mut account {
+            microsoft.refresh_token = "enc:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into();
+        }
+        account.unseal_secrets();
+
+        let Account::Microsoft { microsoft, display_name, uuid, .. } = &account else {
+            panic!("wrong variant");
+        };
+        assert!(microsoft.refresh_token.is_empty(), "unusable token must not be kept");
+        assert_eq!(display_name, "Steve", "the account must survive");
+        assert_eq!(uuid, "abc123");
+    }
+
+    #[test]
+    fn an_offline_account_has_nothing_to_seal() {
+        let mut account = Account::Lunar {
+            username: "Steve".into(),
+            display_name: "Steve".into(),
+            uuid: "abc123".into(),
+            expires_at: "2027-01-01T00:00:00.000Z".into(),
+        };
+        let before = serde_json::to_string(&account).unwrap();
+        account.seal_secrets();
+        assert_eq!(serde_json::to_string(&account).unwrap(), before);
+    }
+
+    /// Saving repeatedly must not re-seal an already-sealed value, or the
+    /// stored token grows on every write.
+    #[test]
+    fn repeated_saves_do_not_nest_the_encryption() {
+        if !crate::secrets::available() {
+            return;
+        }
+        let mut account = microsoft_account();
+        account.seal_secrets();
+        let once = serde_json::to_string(&account).unwrap().len();
+        account.seal_secrets();
+        account.seal_secrets();
+        assert_eq!(serde_json::to_string(&account).unwrap().len(), once);
     }
 }
