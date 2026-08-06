@@ -22,6 +22,7 @@ const BAKED: &[&str] = &[
     "LUNAR_AUTH_SERVER",
     "LUNAR_BRAND_NAME",
     "LUNAR_AZURE_CLIENT_ID",
+    "LUNAR_UPDATE_CHANNEL",
 ];
 
 fn main() {

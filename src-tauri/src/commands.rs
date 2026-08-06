@@ -24,6 +24,16 @@ pub struct AppState {
     /// Ring buffer of the game's output, so the log tab can show history
     /// rather than only lines that arrive after it is opened.
     pub game_log: std::sync::Mutex<std::collections::VecDeque<String>>,
+    /// An update found by the startup check, waiting for the user to accept.
+    /// The handle stays in Rust — nothing the webview sends chooses what gets
+    /// installed.
+    pub pending_update: std::sync::Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Set for the duration of an install, so a second click cannot start a
+    /// concurrent download of the same bytes.
+    pub update_installing: std::sync::atomic::AtomicBool,
+    /// The file-log writer guard, parked here so the install path can flush it
+    /// before the installer terminates the process. See `updater.rs`.
+    pub log_guard: std::sync::Arc<std::sync::Mutex<Option<tracing_appender::non_blocking::WorkerGuard>>>,
 }
 
 impl AppState {
@@ -35,6 +45,9 @@ impl AppState {
             login_cancel: std::sync::Mutex::new(None),
             game_running: std::sync::atomic::AtomicBool::new(false),
             game_log: std::sync::Mutex::new(std::collections::VecDeque::new()),
+            pending_update: std::sync::Mutex::new(None),
+            update_installing: std::sync::atomic::AtomicBool::new(false),
+            log_guard: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }
@@ -1720,4 +1733,37 @@ enum DeclaredLoader {
     ForgeHosted(String),
     /// Modern Forge and LiteLoader, which need the installer pipeline.
     Forge,
+}
+
+// --- Launcher updates -----------------------------------------------------
+
+/// The update found at startup, if any.
+///
+/// A plain read, unlike most commands here, because the frontend also needs it
+/// on mount: a user who opens a view after the check completed would otherwise
+/// never see the offer, having missed the event.
+#[tauri::command]
+pub fn get_pending_update(state: State<'_, AppState>) -> Option<crate::updater::UpdateInfo> {
+    state
+        .pending_update
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(crate::updater::UpdateInfo::from)
+}
+
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<()> {
+    crate::updater::install(app, &state).await
+}
+
+/// Decline the update for this session.
+///
+/// Discards the handle rather than only hiding it in the frontend, so the
+/// offer cannot reappear from a re-render. The next start checks again.
+#[tauri::command]
+pub fn dismiss_update(state: State<'_, AppState>) {
+    if state.pending_update.lock().unwrap().take().is_some() {
+        tracing::info!("Update declined for this session");
+    }
 }

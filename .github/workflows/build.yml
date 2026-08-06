@@ -63,6 +63,12 @@ jobs:
       # to require it. Caught by a container build, where the warm local
       # target/ was not there to hide it.
       - name: Test
+        # Exercises the real OS keystore, which local runs deliberately skip:
+        # every `cargo test` is a new binary identity, so macOS would prompt a
+        # developer on every run. CI builds a fresh keychain each time and is
+        # never asked, so this is the place that proves the integration works.
+        env:
+          LUNAR_TEST_REAL_KEYSTORE: "1"
         run: npm run test:rust
 
       - name: Build

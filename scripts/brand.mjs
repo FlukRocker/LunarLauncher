@@ -90,6 +90,13 @@ if (version) {
     set('version', version)
 }
 
+// Production is the channel real users poll. Everything below treats it as
+// the setting that must not be loosened by accident.
+const channel = get('LUNAR_UPDATE_CHANNEL') ?? 'development'
+if (!['production', 'staging', 'development'].includes(channel)) {
+    errors.push(`LUNAR_UPDATE_CHANNEL must be production, staging or development: ${channel}`)
+}
+
 const endpoint = get('LUNAR_UPDATER_ENDPOINT')
 const pubkey = get('LUNAR_UPDATER_PUBKEY')
 if (endpoint) {
@@ -107,8 +114,22 @@ if (endpoint) {
     set('plugins.updater.active', true)
     set('plugins.updater.endpoints', [endpoint])
     if (endpoint.startsWith('http://')) {
-        console.warn('[brand] WARNING: updater endpoint is plain http; updates are downloaded over an unencrypted channel')
-        set('plugins.updater.dangerousInsecureTransportProtocol', true)
+        // The updater channel delivers an executable. Over plain http anyone
+        // on the path chooses which bytes arrive; the signature check is the
+        // only thing left standing, and it should not be the only thing.
+        if (channel === 'production') {
+            errors.push(
+                'LUNAR_UPDATE_CHANNEL=production requires an https updater endpoint. ' +
+                    'Plain http would need dangerousInsecureTransportProtocol, which turns off ' +
+                    'transport security on the channel that delivers an executable.'
+            )
+        } else {
+            console.warn(
+                `[brand] WARNING: ${channel} channel over plain http; updates are downloaded ` +
+                    'over an unencrypted channel'
+            )
+            set('plugins.updater.dangerousInsecureTransportProtocol', true)
+        }
     }
 }
 if (pubkey) set('plugins.updater.pubkey', pubkey)

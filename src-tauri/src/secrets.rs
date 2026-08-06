@@ -113,7 +113,35 @@ fn load_or_create_key() -> Result<[u8; KEY_LEN], String> {
     }
 }
 
+/// Opt in to the real keystore under `cargo test`.
+///
+/// Set by CI, unset locally. See `key()`.
+#[cfg(test)]
+const REAL_KEYSTORE_ENV: &str = "LUNAR_TEST_REAL_KEYSTORE";
+
 fn key() -> Option<&'static [u8; KEY_LEN]> {
+    // Tests use a process-local key unless they ask for the real thing.
+    //
+    // Not a shortcut for its own sake: a keychain item is bound to the signing
+    // identity of the binary that created it, and every `cargo test` builds a
+    // new binary, so macOS asks the developer to approve access on every run.
+    // That turns a test suite into something you have to sit and click
+    // through, which is how suites stop being run.
+    //
+    // Nothing is lost by it. The crypto — round trip, AAD binding, tamper
+    // detection, migration — is exercised identically against an ephemeral
+    // key. Only the keystore *integration* needs the real backend, and that is
+    // one assertion, gated behind the variable CI sets.
+    #[cfg(test)]
+    if std::env::var_os(REAL_KEYSTORE_ENV).is_none() {
+        return KEY
+            .get_or_init(|| {
+                let mut k = [0u8; KEY_LEN];
+                random(&mut k).ok().map(|()| k)
+            })
+            .as_ref();
+    }
+
     KEY.get_or_init(|| match load_or_create_key() {
         Ok(k) => Some(k),
         Err(err) => {
@@ -230,6 +258,13 @@ mod tests {
     /// documented fallback there is plaintext with a warning.
     #[test]
     fn the_keystore_is_usable_on_the_platforms_that_have_one() {
+        // Only meaningful against the real backend; otherwise `available()` is
+        // answering about the ephemeral test key and asserts nothing.
+        if std::env::var_os(REAL_KEYSTORE_ENV).is_none() {
+            return;
+        }
+        // A headless container has no Secret Service, and the documented
+        // fallback there is plaintext with a warning.
         if cfg!(target_os = "linux") {
             return;
         }

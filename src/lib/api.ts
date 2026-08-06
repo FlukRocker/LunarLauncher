@@ -384,3 +384,40 @@ export const diagnosticsApi = {
     export: (errorContext?: string) =>
         invoke<string>('export_diagnostics', { errorContext: errorContext ?? null })
 }
+
+// --- Launcher updates -----------------------------------------------------
+
+export interface UpdateInfo {
+    version: string
+    currentVersion: string
+    /** Absent, not null, when the release carries no notes. */
+    notes?: string
+    pubDate?: string
+}
+
+export interface UpdateProgress {
+    downloaded: number
+    /** Absent when the server sends no content-length. */
+    total?: number
+    percent?: number
+}
+
+export const updateApi = {
+    /**
+     * The update found by the startup check, if any.
+     *
+     * Polled once on mount as well as listened for: the check runs in the
+     * background and may finish before this component exists, and an offer
+     * that depends on catching an event would be missed entirely.
+     */
+    pending: () => invoke<UpdateInfo | null>('get_pending_update'),
+    /**
+     * Download and install. Refused while the game is running — replacing the
+     * launcher under a live session is the one destructive thing here.
+     *
+     * On Windows this does not return: the installer terminates the process.
+     */
+    install: () => invoke<void>('install_update'),
+    /** Decline for this session. The next start checks again. */
+    dismiss: () => invoke<void>('dismiss_update')
+}

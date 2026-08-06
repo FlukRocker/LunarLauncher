@@ -20,6 +20,7 @@ pub mod paths;
 pub mod secrets;
 pub mod server_status;
 pub mod telemetry;
+pub mod updater;
 pub mod process_builder;
 
 use commands::AppState;
@@ -129,8 +130,10 @@ pub fn run() {
     //
     // The guard must outlive the app: dropping it flushes and stops the
     // writer thread, so binding it to `_` (rather than a name) would discard
-    // every buffered line at the end of this statement.
-    let (file_layer, _log_guard) = match file_log_layer(&paths::log_directory()) {
+    // every buffered line at the end of this statement. It is parked on
+    // AppState below, which both gives it the app's lifetime and lets the
+    // update path flush deliberately before the installer kills the process.
+    let (file_layer, log_guard) = match file_log_layer(&paths::log_directory()) {
         Ok((layer, guard)) => (Some(layer), Some(guard)),
         Err(err) => {
             eprintln!("File logging unavailable, continuing with stdout only: {err}");
@@ -175,7 +178,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(AppState::new())
+        .manage({
+            let state = AppState::new();
+            *state.log_guard.lock().unwrap() = log_guard;
+            state
+        })
         .manage(discord::DiscordState::default())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -218,6 +225,9 @@ pub fn run() {
             commands::get_game_log,
             commands::clear_game_log,
             commands::export_diagnostics,
+            commands::get_pending_update,
+            commands::install_update,
+            commands::dismiss_update,
             commands::get_telemetry,
             commands::save_telemetry,
         ])
@@ -272,6 +282,7 @@ fn check_for_updates(app: tauri::AppHandle) {
                     current = %update.current_version,
                     "An update is available."
                 );
+                updater::announce(&app, update);
             }
             Ok(None) => tracing::info!("Launcher is up to date."),
             Err(err) => tracing::warn!(%err, "Update check failed; continuing."),

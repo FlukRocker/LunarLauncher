@@ -23,10 +23,19 @@ export default defineConfig(({ mode }) => {
     define: {
         __BRAND_NAME__: JSON.stringify(brand)
     },
+    esbuild: {
+        // Source comments are shipped verbatim inside a bundle otherwise. They
+        // are written for maintainers and regularly name internals, endpoints
+        // and the reasoning behind a workaround — none of which belongs in an
+        // artifact handed to users.
+        legalComments: 'none'
+    },
     build: {
         // Safari 13 / Edge 89 are the floor for the system webviews Tauri uses.
         target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
         minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
+        // A sourcemap reconstructs the original source, comments included, so
+        // it undoes the line above. Debug builds only.
         sourcemap: !!process.env.TAURI_ENV_DEBUG
     }
     }

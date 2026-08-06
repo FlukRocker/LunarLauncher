@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
-import { api, authApi, discordApi, isApiError, type Account, type Bootstrap } from './lib/api'
+import {
+    api,
+    authApi,
+    discordApi,
+    gameApi,
+    isApiError,
+    updateApi,
+    type Account,
+    type Bootstrap,
+    type UpdateInfo
+} from './lib/api'
+import { listen } from '@tauri-apps/api/event'
 import { Frame } from './components/Frame'
+import { UpdateModal } from './components/UpdateModal'
 import { FatalError } from './views/FatalError'
 import { Landing } from './views/Landing'
 import { Loading } from './views/Loading'
@@ -32,6 +44,33 @@ export function App() {
     const [accounts, setAccounts] = useState<Account[]>([])
     const [selected, setSelected] = useState<Account | null>(null)
     const [serverId, setServerId] = useState<string | null>(null)
+    const [update, setUpdate] = useState<UpdateInfo | null>(null)
+    const [gameRunning, setGameRunning] = useState(false)
+
+    // Two sources, both required. The startup check runs in a background task
+    // that usually finishes before this mounts, so listening alone would miss
+    // the update on most starts; and a launcher already open when a slow check
+    // completes would never see it without the event.
+    useEffect(() => {
+        void updateApi.pending().then(setUpdate)
+        const unlisten = listen<UpdateInfo>('update://available', (e) => setUpdate(e.payload))
+        return () => {
+            void unlisten.then((f) => f())
+        }
+    }, [])
+
+    // The install is refused in Rust while a game is live; this only keeps the
+    // button from looking available when it is not.
+    useEffect(() => {
+        if (!update) return
+        void gameApi.isRunning().then(setGameRunning)
+        const started = listen('game://started', () => setGameRunning(true))
+        const exited = listen('game://exited', () => setGameRunning(false))
+        return () => {
+            void started.then((f) => f())
+            void exited.then((f) => f())
+        }
+    }, [update])
 
     const refreshAccounts = () => {
         void api.getAccounts().then((list) => {
@@ -114,6 +153,13 @@ export function App() {
     return (
         <>
             <Frame />
+            {update && (
+                <UpdateModal
+                    update={update}
+                    gameRunning={gameRunning}
+                    onDismiss={() => setUpdate(null)}
+                />
+            )}
             <main id="main">
                 {view === 'loading' && <Loading />}
                 {view === 'welcome' && <Welcome onContinue={() => setView('loginOptions')} />}

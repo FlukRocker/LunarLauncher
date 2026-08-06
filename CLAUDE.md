@@ -114,6 +114,31 @@ that silently wipes the user's accounts and settings. This was a live bug found
 in testing. `electron_written_config_survives_a_round_trip` guards it; do not
 "simplify" those renames away.
 
+### Self-update
+
+`check_for_updates` still only *reports*; `updater.rs` is the offer it defers
+to. The `Update` handle is parked on `AppState` and never crosses to the
+webview — the frontend chooses whether to install, not what.
+
+Three things that are not obvious:
+
+- **The endpoint needs `{{target}}-{{arch}}`, not `{{target}}`.** Tauri
+  substitutes `{{target}}` as the bare OS name, so the shorter form requests
+  `/updates/windows/2.2.1` and the controller answers 400. It surfaces as a
+  generic network error naming nothing.
+- **The log guard is flushed in the download-finished callback**, because past
+  that point the installer may terminate the process without unwinding — and
+  the log is the only instrument on Windows, where there is no console.
+- **Installing is refused while a game runs.** The game is a child process and
+  the installer will overwrite a running executable's file. This is the one
+  genuinely destructive thing the feature can do.
+
+`LUNAR_UPDATE_CHANNEL=production` is enforced, not advisory: an http endpoint
+is refused at build time, since permitting it would require
+`dangerousInsecureTransportProtocol` on the channel that delivers an
+executable. Release builds strip symbols and the bundle carries no comments or
+sourcemaps.
+
 ### Credentials are encrypted at rest
 
 `secrets.rs` seals the token fields of `config.json` with XChaCha20-Poly1305,
