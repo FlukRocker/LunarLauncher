@@ -19,8 +19,8 @@
 
 mod install;
 
-use iced::widget::{button, column, container, progress_bar, row, text};
-use iced::{gradient, Alignment, Background, Border, Color, Element, Length, Radians, Subscription, Task, Theme};
+use iced::widget::{button, column, container, mouse_area, progress_bar, row, text, Space};
+use iced::{gradient, window, Alignment, Background, Border, Color, Element, Length, Radians, Subscription, Task, Theme};
 
 // --- Cyber Network palette --------------------------------------------------
 // Same tokens as the launcher's cyber.css, so the installer and the thing it
@@ -53,11 +53,20 @@ fn brand_gradient() -> Background {
 #[derive(Debug, Clone)]
 enum Message {
     Install,
+    /// Close the running launcher, then install over it.
+    CloseAndInstall,
+    /// The window has no system title bar, so dragging is ours to implement.
+    Drag,
+    Close,
     Progress(install::Progress),
     Launch,
 }
 
 enum Stage {
+    /// The launcher is running, so its files cannot be replaced. Offered as a
+    /// choice rather than reported as a dead end: the fix is one click and the
+    /// installer can do it.
+    Blocked,
     /// Shown first. One click, but a click — the user is told where this is
     /// going before anything is written, which a silent install never does.
     Confirm,
@@ -79,6 +88,18 @@ impl Default for Installer {
 impl Installer {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            // `latest()` yields Option<Id>; `and_then` skips the drag when
+            // there is no window, which is the case while one is closing.
+            Message::Drag => window::latest().and_then(window::drag),
+            Message::Close => iced::exit(),
+            Message::CloseAndInstall => {
+                install::close_running();
+                self.stage = Stage::Working {
+                    fraction: 0.0,
+                    detail: String::from("Preparing"),
+                };
+                Task::none()
+            }
             Message::Install => {
                 self.stage = Stage::Working {
                     fraction: 0.0,
@@ -98,7 +119,14 @@ impl Installer {
                 Task::done(Message::Launch)
             }
             Message::Progress(install::Progress::Failed(err)) => {
-                self.stage = Stage::Failed(err);
+                // The one failure with a remedy the installer can perform gets
+                // its own screen and a button, rather than a message telling
+                // the user to go and do it themselves.
+                self.stage = if err.contains("already running") {
+                    Stage::Blocked
+                } else {
+                    Stage::Failed(err)
+                };
                 Task::none()
             }
             Message::Launch => {
@@ -127,7 +155,25 @@ impl Installer {
         ]
         .spacing(3);
 
-        let header = row![mark, brand].spacing(12).align_y(Alignment::Center);
+        let close = button(text("\u{2715}").size(13).color(MUTE))
+            .on_press(Message::Close)
+            .padding([4, 10])
+            .style(|_, _| button::Style {
+                background: None,
+                text_color: MUTE,
+                border: Border::default(),
+                ..Default::default()
+            });
+
+        // The whole header drags the window. Without decorations there is no
+        // system title bar to grab, and a dialog that cannot be moved off
+        // whatever it opened on top of is worse than one with a mismatched bar.
+        let header = mouse_area(
+            row![mark, brand, Space::new().width(Length::Fill), close]
+                .spacing(12)
+                .align_y(Alignment::Center),
+        )
+        .on_press(Message::Drag);
 
         let kv = |k: &'static str, v: String| {
             row![
@@ -138,6 +184,27 @@ impl Installer {
         };
 
         let body: Element<'_, Message> = match &self.stage {
+            Stage::Blocked => column![
+                text("CLOSE LUNAR LAUNCHER").size(22).color(GOLD),
+                text(
+                    "It is running, and its files cannot be replaced while it is open. \
+                     The installer can close it for you."
+                )
+                .size(12)
+                .color(DIM),
+                button(text("CLOSE IT AND INSTALL").size(13).color(BG))
+                    .on_press(Message::CloseAndInstall)
+                    .padding([10, 26])
+                    .style(|_, _| button::Style {
+                        background: Some(brand_gradient()),
+                        text_color: BG,
+                        border: Border::default(),
+                        ..Default::default()
+                    }),
+            ]
+            .spacing(16)
+            .into(),
+
             Stage::Confirm => column![
                 text("READY TO INSTALL").size(22).color(INK),
                 column![
@@ -262,8 +329,12 @@ fn main() -> iced::Result {
 
     iced::application(Installer::default, Installer::update, Installer::view)
         .title("Lunar Launcher Setup")
-        .window_size((480.0, 300.0))
+        .window_size((480.0, 320.0))
         .resizable(false)
+        // No system title bar. Windows paints it with the user's accent
+        // colour, which on a dark window is a bright band the design has no
+        // way to influence; the header below replaces it.
+        .decorations(false)
         .subscription(Installer::subscription)
         .theme(theme)
         .run()

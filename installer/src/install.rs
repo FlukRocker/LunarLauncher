@@ -191,6 +191,26 @@ fn clear_install(dir: &Path) {
     }
 }
 
+/// Close a running launcher so its files can be replaced.
+///
+/// `taskkill /F` rather than a graceful request: the launcher has no IPC to
+/// ask politely through, and the user has already chosen to replace it. Its
+/// config and game data live outside the install directory, so nothing is lost
+/// by ending the process — the worst case is an unsaved window position.
+#[cfg(target_os = "windows")]
+pub fn close_running() {
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", MAIN_EXE])
+        .output();
+    // Windows releases the image lock a moment after the process ends, so the
+    // extraction that follows would still hit a sharing violation without
+    // this pause.
+    std::thread::sleep(std::time::Duration::from_millis(600));
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn close_running() {}
+
 #[cfg(target_os = "windows")]
 fn register(dir: &Path, exe: &Path) -> Result<(), String> {
     use winreg::enums::*;
