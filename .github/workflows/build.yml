@@ -118,7 +118,7 @@ jobs:
           cargo build --release --manifest-path installer/Cargo.toml
           New-Item -ItemType Directory -Force -Path dist-installer | Out-Null
           Copy-Item installer/target/release/LunarLauncherSetup.exe `
-                    "dist-installer/Lunar Launcher Setup.exe"
+                    "dist-installer/Cyber Launcher Setup.exe"
 
       # Authenticode, which is what stops SmartScreen warning on download. It
       # is unrelated to the updater's minisign key: that proves an update came
@@ -144,7 +144,7 @@ jobs:
           $st = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
                 Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
           & $st.FullName sign /fd SHA256 /f cert.pfx /p $env:CERT_PASSWORD `
-              /tr http://timestamp.digicert.com /td SHA256 "dist-installer/Lunar Launcher Setup.exe"
+              /tr http://timestamp.digicert.com /td SHA256 "dist-installer/Cyber Launcher Setup.exe"
           if ($LASTEXITCODE -ne 0) { throw "signing failed" }
           Remove-Item cert.pfx
 

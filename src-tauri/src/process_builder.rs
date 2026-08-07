@@ -358,7 +358,7 @@ pub fn build_args(ctx: &LaunchContext, version_json: &VersionJson) -> Vec<String
     }
 
     if cfg!(target_os = "macos") {
-        args.push("-Xdock:name=Lunar Launcher".into());
+        args.push("-Xdock:name=Cyber Launcher".into());
     }
     args.push(format!("-Xmx{}", ctx.java_config.max_ram));
     args.push(format!("-Xms{}", ctx.java_config.min_ram));

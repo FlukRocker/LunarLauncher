@@ -2,7 +2,7 @@
 // the installer paints is the first thing a user sees.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! Lunar Launcher's installer.
+//! Cyber Launcher's installer.
 //!
 //! Replaces NSIS. The reason is not that NSIS works badly — it is that NSIS
 //! draws native Win32 controls, so the Cyber Network design could only ever be
@@ -151,7 +151,7 @@ impl Installer {
 
         let brand = column![
             text("CYBER NETWORK").size(15).color(INK),
-            text("LUNAR LAUNCHER SETUP").size(9).color(MUTE),
+            text("CYBER LAUNCHER SETUP").size(9).color(MUTE),
         ]
         .spacing(3);
 
@@ -246,7 +246,7 @@ impl Installer {
 
             Stage::Done(_) => column![
                 text("INSTALLED").size(22).color(INK),
-                text("Starting Lunar Launcher…").size(11).color(DIM),
+                text("Starting Cyber Launcher…").size(11).color(DIM),
             ]
             .spacing(10)
             .into(),
@@ -328,7 +328,7 @@ fn main() -> iced::Result {
     }
 
     iced::application(Installer::default, Installer::update, Installer::view)
-        .title("Lunar Launcher Setup")
+        .title("Cyber Launcher Setup")
         .window_size((480.0, 320.0))
         .resizable(false)
         // No system title bar. Windows paints it with the user's accent

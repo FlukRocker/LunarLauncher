@@ -395,6 +395,29 @@ impl ConfigManager {
             std::fs::create_dir_all(parent)?;
         }
 
+        // The product rename moved this directory. Without moving it across,
+        // every existing user starts as though freshly installed — accounts,
+        // settings and server selection all still on disk under the old name,
+        // and no way for them to know why.
+        //
+        // Only when the new location does not exist: an existing Cyber
+        // Launcher install must never be overwritten by a stale one.
+        let legacy_dir = paths::legacy_product_directory();
+        if !path.exists() && legacy_dir.is_dir() {
+            let target = paths::launcher_directory();
+            match std::fs::rename(&legacy_dir, &target) {
+                Ok(()) => tracing::info!(
+                    from = %legacy_dir.display(),
+                    to = %target.display(),
+                    "Migrated the launcher directory after the product rename"
+                ),
+                // Not fatal: a failed move leaves the old directory untouched
+                // and the launcher starts with defaults, which is recoverable.
+                // Deleting or half-copying it would not be.
+                Err(err) => tracing::warn!(%err, "Could not migrate the launcher directory"),
+            }
+        }
+
         let config = if path.exists() {
             Self::read_or_default(&path)
         } else if legacy.exists() {

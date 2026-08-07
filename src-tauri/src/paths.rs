@@ -13,9 +13,21 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::{Error, Result};
 
-/// The product name Electron used for `app.getPath('userData')`.
-/// Changing this orphans every existing user's config.json.
-pub const PRODUCT_NAME: &str = "Lunar Launcher";
+/// The product name, used for the launcher's own data directory.
+///
+/// Changing this orphans every existing user's config.json — their accounts
+/// and settings stay on disk under the old name and the launcher starts as
+/// though freshly installed. `legacy_product_directory` and the migration in
+/// `Config::load` exist so the rename from "Lunar Launcher" does not do that.
+pub const PRODUCT_NAME: &str = "Cyber Launcher";
+
+/// What the directory was called before the rename to Cyber Launcher.
+pub const LEGACY_PRODUCT_NAME: &str = "Lunar Launcher";
+
+/// The pre-rename launcher directory, migrated on first load if it exists.
+pub fn legacy_product_directory() -> PathBuf {
+    sys_root().join(LEGACY_PRODUCT_NAME)
+}
 
 /// Join a distribution-supplied relative path onto a base directory, refusing
 /// anything that would escape it.

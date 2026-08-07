@@ -19,7 +19,7 @@ const isMac = navigator.userAgent.includes('Mac')
 
 // Substituted at build time from LUNAR_BRAND_NAME; see vite.config.ts. The
 // Windows titlebar draws its own title, so a branded build would otherwise
-// still say "Lunar Launcher" in the one place the user always sees.
+// still say the wrong name in the one place the user always sees.
 declare const __BRAND_NAME__: string
 
 export function Frame() {

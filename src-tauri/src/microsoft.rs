@@ -441,18 +441,18 @@ mod tests {
 
 /// Page shown in the browser once the code has been captured.
 const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8>\
-<title>Lunar Launcher</title>\
+<title>Cyber Launcher</title>\
 <body style=\"background:#171614;color:#fff;font-family:-apple-system,Segoe UI,sans-serif;\
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0\">\
 <div style=\"text-align:center\"><h2>Signed in</h2>\
-<p style=\"opacity:.7\">You can close this tab and return to Lunar Launcher.</p></div>";
+<p style=\"opacity:.7\">You can close this tab and return to Cyber Launcher.</p></div>";
 
 const FAIL_PAGE: &str = "<!doctype html><meta charset=utf-8>\
-<title>Lunar Launcher</title>\
+<title>Cyber Launcher</title>\
 <body style=\"background:#171614;color:#fff;font-family:-apple-system,Segoe UI,sans-serif;\
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0\">\
 <div style=\"text-align:center\"><h2>Sign-in failed</h2>\
-<p style=\"opacity:.7\">Return to Lunar Launcher for details.</p></div>";
+<p style=\"opacity:.7\">Return to Cyber Launcher for details.</p></div>";
 
 fn http_response(body: &str) -> String {
     format!(

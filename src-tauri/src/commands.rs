@@ -1602,7 +1602,7 @@ pub fn export_diagnostics(
     use std::fmt::Write as _;
 
     let mut r = String::new();
-    let _ = writeln!(r, "Lunar Launcher diagnostics");
+    let _ = writeln!(r, "Cyber Launcher diagnostics");
     let _ = writeln!(r, "==========================");
     let _ = writeln!(r, "version    {}", env!("CARGO_PKG_VERSION"));
     let _ = writeln!(

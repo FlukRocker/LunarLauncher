@@ -178,7 +178,7 @@ pub fn run() {
         // Not a secret — it appears in the authorize URL every user's browser
         // shows.
         azure_client_id = microsoft::AZURE_CLIENT_ID,
-        "Lunar Launcher starting"
+        "Cyber Launcher starting"
     );
 
     tauri::Builder::default()

@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 /// entries. HKCU, not HKLM — the machine-wide equivalent needs admin.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub const UNINSTALL_KEY: &str =
-    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\LunarLauncher";
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\CyberLauncher";
 
-pub const PRODUCT_NAME: &str = "Lunar Launcher";
+pub const PRODUCT_NAME: &str = "Cyber Launcher";
 pub const MAIN_EXE: &str = "lunarlauncher.exe";
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub const VERSION: &str = env!("LUNAR_VERSION");
@@ -39,7 +39,7 @@ pub enum Progress {
 }
 
 pub fn install_dir() -> PathBuf {
-    // %LOCALAPPDATA%\Lunar Launcher. Not Program Files: per-user is what makes
+    // %LOCALAPPDATA%\Cyber Launcher. Not Program Files: per-user is what makes
     // this installable and updatable without elevation.
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
@@ -333,7 +333,7 @@ fn shortcut(target: &Path, link: &Path) -> Result<(), String> {
 
 /// Remove everything `register` created, and the install directory.
 ///
-/// Deliberately does **not** touch `%APPDATA%\Lunar Launcher` or
+/// Deliberately does **not** touch `%APPDATA%\Cyber Launcher` or
 /// `%APPDATA%\.lunarlauncher`: those hold the user's accounts, settings and
 /// downloaded packs. Uninstalling the launcher should not destroy several
 /// gigabytes of game data and force a re-login, and a reinstall should find

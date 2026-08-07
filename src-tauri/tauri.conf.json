@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Lunar Launcher",
+  "productName": "Cyber Launcher",
   "version": "2.2.1",
   "identifier": "net.hermes-mc.lunarlauncher",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Lunar Launcher",
+        "title": "Cyber Launcher",
         "width": 980,
         "height": 552,
         "resizable": true,
