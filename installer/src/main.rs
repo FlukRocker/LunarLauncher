@@ -442,6 +442,10 @@ fn main() -> iced::Result {
         .title("Cyber Launcher Setup")
         .window_size((820.0, 498.0))
         .resizable(false)
+        // Centred rather than wherever the window manager decides. An
+        // installer opening off in a corner, or half off-screen on a
+        // multi-monitor setup, is the first impression of the product.
+        .centered()
         // No system title bar. Windows paints it with the user's accent
         // colour, which on a dark window is a bright band the design has no
         // way to influence; the header below replaces it.
