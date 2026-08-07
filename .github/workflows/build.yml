@@ -74,6 +74,17 @@ jobs:
       - name: Build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Our own Azure app registration, baked in by build.rs.
+          #
+          # Not a secret: a client id is public by design — it appears in the
+          # authorize URL every user's browser sees. The *secret* is what must
+          # never exist for a public client, and none was created.
+          #
+          # This only works once Mojang has approved the registration for the
+          # Minecraft Services API. Until then it authenticates with Microsoft
+          # and Xbox Live and is then refused by Minecraft with a 403, which is
+          # indistinguishable on screen from an account problem.
+          LUNAR_AZURE_CLIENT_ID: c28eb326-e12c-4344-b8af-d5fd88aa14a4
           # Required because bundle.createUpdaterArtifacts is on: the bundler
           # finds a public key in tauri.conf.json and refuses to produce an
           # unsigned update artifact next to it. Without the secret this step
