@@ -19,8 +19,8 @@
 
 mod install;
 
-use iced::widget::{column, container, progress_bar, row, text};
-use iced::{Alignment, Background, Color, Element, Length, Subscription, Task, Theme};
+use iced::widget::{button, column, container, progress_bar, row, text};
+use iced::{gradient, Alignment, Background, Border, Color, Element, Length, Radians, Subscription, Task, Theme};
 
 // --- Cyber Network palette --------------------------------------------------
 // Same tokens as the launcher's cyber.css, so the installer and the thing it
@@ -30,15 +30,37 @@ const INK: Color = Color::from_rgb(0.914, 0.957, 0.957); // #e9f4f4
 const DIM: Color = Color::from_rgb(0.576, 0.659, 0.678); // #93a8ad
 const MUTE: Color = Color::from_rgb(0.357, 0.427, 0.459); // #5b6d75
 const EMERALD: Color = Color::from_rgb(0.208, 0.851, 0.478); // #35d97a
+const GOLD: Color = Color::from_rgb(1.000, 0.710, 0.180); // #ffb52e
+const DIAMOND: Color = Color::from_rgb(0.247, 0.847, 0.941); // #3fd8f0
 const REDSTONE: Color = Color::from_rgb(1.000, 0.239, 0.310); // #ff3d4f
+
+/// `--cnm-grad`: diamond at 0%, emerald at 48%, gold at 100%.
+///
+/// The design's signature element. Reproduced as a real gradient rather than
+/// approximated with a flat colour, which is the whole reason this window is
+/// iced and not a Win32 dialog — NSIS could only ever have painted a picture
+/// of it.
+fn brand_gradient() -> Background {
+    Background::Gradient(
+        gradient::Linear::new(Radians(std::f32::consts::FRAC_PI_2))
+            .add_stop(0.0, DIAMOND)
+            .add_stop(0.48, EMERALD)
+            .add_stop(1.0, GOLD)
+            .into(),
+    )
+}
 
 #[derive(Debug, Clone)]
 enum Message {
+    Install,
     Progress(install::Progress),
     Launch,
 }
 
 enum Stage {
+    /// Shown first. One click, but a click — the user is told where this is
+    /// going before anything is written, which a silent install never does.
+    Confirm,
     Working { fraction: f32, detail: String },
     Done(std::path::PathBuf),
     Failed(String),
@@ -50,18 +72,20 @@ struct Installer {
 
 impl Default for Installer {
     fn default() -> Self {
-        Self {
-            stage: Stage::Working {
-                fraction: 0.0,
-                detail: String::from("Preparing"),
-            },
-        }
+        Self { stage: Stage::Confirm }
     }
 }
 
 impl Installer {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Install => {
+                self.stage = Stage::Working {
+                    fraction: 0.0,
+                    detail: String::from("Preparing"),
+                };
+                Task::none()
+            }
             Message::Progress(install::Progress::Step(fraction, detail)) => {
                 self.stage = Stage::Working { fraction, detail };
                 Task::none()
@@ -93,7 +117,7 @@ impl Installer {
             .align_x(Alignment::Center)
             .align_y(Alignment::Center)
             .style(|_| container::Style {
-                background: Some(Background::Color(EMERALD)),
+                background: Some(brand_gradient()),
                 ..Default::default()
             });
 
@@ -105,7 +129,36 @@ impl Installer {
 
         let header = row![mark, brand].spacing(12).align_y(Alignment::Center);
 
+        let kv = |k: &'static str, v: String| {
+            row![
+                text(k).size(10).color(MUTE).width(110),
+                text(v).size(12).color(INK),
+            ]
+            .align_y(Alignment::Center)
+        };
+
         let body: Element<'_, Message> = match &self.stage {
+            Stage::Confirm => column![
+                text("READY TO INSTALL").size(22).color(INK),
+                column![
+                    kv("DESTINATION", install::install_dir().to_string_lossy().to_string()),
+                    kv("VERSION", install::VERSION.to_string()),
+                    kv("SIZE", format!("{:.0} MB", install::PAYLOAD.len() as f64 / 1_048_576.0)),
+                ]
+                .spacing(6),
+                button(text("INSTALL").size(13).color(BG))
+                    .on_press(Message::Install)
+                    .padding([10, 26])
+                    .style(|_, _| button::Style {
+                        background: Some(brand_gradient()),
+                        text_color: BG,
+                        border: Border::default(),
+                        ..Default::default()
+                    }),
+            ]
+            .spacing(16)
+            .into(),
+
             Stage::Working { fraction, detail } => column![
                 text("INSTALLING").size(22).color(INK),
                 // The closure parameter is deliberately unannotated. Writing
@@ -209,7 +262,7 @@ fn main() -> iced::Result {
 
     iced::application(Installer::default, Installer::update, Installer::view)
         .title("Lunar Launcher Setup")
-        .window_size((460.0, 240.0))
+        .window_size((480.0, 300.0))
         .resizable(false)
         .subscription(Installer::subscription)
         .theme(theme)

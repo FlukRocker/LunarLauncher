@@ -8,6 +8,28 @@
 use std::path::Path;
 
 fn main() {
+    // The version shown to the user is the *launcher's*, read from the same
+    // tauri.conf.json the launcher builds from. `CARGO_PKG_VERSION` here is
+    // this crate's own, which is unrelated and was being displayed as though
+    // it were the product's — a wrong number, presented confidently, on the
+    // one screen a user reads before agreeing to install.
+    let conf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("src-tauri/tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", conf.display());
+    let version = std::fs::read_to_string(&conf)
+        .ok()
+        .and_then(|raw| {
+            raw.split("\"version\"")
+                .nth(1)?
+                .split('"')
+                .nth(1)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "unknown".into());
+    println!("cargo:rustc-env=LUNAR_VERSION={version}");
+
     let payload = Path::new(env!("CARGO_MANIFEST_DIR")).join("payload.zip");
     println!("cargo:rerun-if-changed={}", payload.display());
 

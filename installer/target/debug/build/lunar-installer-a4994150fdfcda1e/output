@@ -1,1 +1,3 @@
+cargo:rerun-if-changed=/Users/flukrocker/work/github-repo/LunarLauncher/src-tauri/tauri.conf.json
+cargo:rustc-env=LUNAR_VERSION=2.2.1
 cargo:rerun-if-changed=/Users/flukrocker/work/github-repo/LunarLauncher/installer/payload.zip

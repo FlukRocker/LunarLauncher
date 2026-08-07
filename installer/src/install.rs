@@ -20,7 +20,7 @@ pub const UNINSTALL_KEY: &str =
 pub const PRODUCT_NAME: &str = "Lunar Launcher";
 pub const MAIN_EXE: &str = "lunarlauncher.exe";
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("LUNAR_VERSION");
 
 /// The archive of everything to install, embedded at build time.
 ///

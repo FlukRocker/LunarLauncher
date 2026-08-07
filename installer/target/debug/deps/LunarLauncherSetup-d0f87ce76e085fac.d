@@ -6,4 +6,4 @@ src/main.rs:
 src/install.rs:
 src/../payload.zip:
 
-# env-dep:CARGO_PKG_VERSION=0.1.0
+# env-dep:LUNAR_VERSION=2.2.1
