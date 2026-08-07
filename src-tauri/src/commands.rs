@@ -1297,7 +1297,19 @@ pub async fn microsoft_login_browser(state: State<'_, AppState>) -> Result<Accou
         }
     };
 
-    let auth = microsoft::full_auth_flow_with_redirect(&code, false, &redirect_uri).await?;
+    // Logged, not just returned. The error reaches the UI either way, but on
+    // Windows there is no console and the rolling file is the only record —
+    // and a sign-in that fails leaves the user back on the login screen with
+    // nothing in the log between "waiting for the browser" and the next
+    // attempt, which is indistinguishable from the redirect never arriving.
+    let auth = match microsoft::full_auth_flow_with_redirect(&code, false, &redirect_uri).await {
+        Ok(auth) => auth,
+        Err(err) => {
+            tracing::warn!(%err, "Microsoft sign-in failed after the redirect returned");
+            return Err(err);
+        }
+    };
+    tracing::info!(user = %auth.profile.name, "Microsoft sign-in succeeded");
 
     let account = Account::Microsoft {
         access_token: auth.mc_access_token,
