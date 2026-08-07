@@ -240,10 +240,19 @@ pub async fn get_mc_access_token(xsts: &XblResponse) -> Result<McTokenResponse> 
         .send()
         .await?;
     if !resp.status().is_success() {
-        return Err(Error::Other(format!(
-            "Minecraft services rejected the Xbox token ({}).",
-            resp.status()
-        )));
+        let status = resp.status();
+        // The body is the whole diagnosis and was being discarded. Minecraft
+        // services answers a rejection with JSON naming the reason — an
+        // account with no Java entitlement, a banned profile, a blocked
+        // region — and without it a 403 is just a number that fits several
+        // causes needing different fixes.
+        let detail = resp.text().await.unwrap_or_default();
+        let detail = detail.trim();
+        return Err(Error::Other(if detail.is_empty() {
+            format!("Minecraft services rejected the Xbox token ({status}).")
+        } else {
+            format!("Minecraft services rejected the Xbox token ({status}): {detail}")
+        }));
     }
     Ok(resp.json().await?)
 }
