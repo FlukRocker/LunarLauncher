@@ -169,6 +169,15 @@ pub fn run() {
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         log_dir = %paths::log_directory().display(),
+        // Which Azure app this build authenticates as. Baked at build time and
+        // otherwise invisible: a sign-in refused with "Invalid app
+        // registration" looks the same whether the registration is unapproved
+        // or the id never made it into the binary, and one of those is a
+        // paperwork problem while the other is a build problem.
+        //
+        // Not a secret — it appears in the authorize URL every user's browser
+        // shows.
+        azure_client_id = microsoft::AZURE_CLIENT_ID,
         "Lunar Launcher starting"
     );
 
