@@ -60,6 +60,12 @@ body {
     /* A flex item defaults to min-height:auto, which refuses to shrink below
        its content and would reintroduce the overflow. */
     min-height: 0;
+    /* Both axes. This is a fixed-size application window, not a document —
+       nothing inside it should ever produce a scrollbar. The launch progress
+       row is added to a bar that already has content, and without this it
+       pushed the total past the viewport and scrolled the whole window
+       sideways mid-download. */
+    overflow: hidden;
     background: linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
     width: 100%;
     position: relative;
@@ -940,4 +946,29 @@ img.mediaSVG {
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
+}
+
+/* Launch progress must shrink rather than widen the bar it sits in.
+   launcher.css gives the progress element a fixed 265px, which was fine in
+   Electron's layout and overflows here once the server and status labels share
+   the row. */
+#launch_details {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#launch_details_right {
+    min-width: 0;
+}
+
+#launch_progress[value] {
+    max-width: 100%;
+}
+
+#launch_details_text {
+    /* A long "Downloading 307 mods and files (412 MB)" line would otherwise
+       widen the row rather than truncate. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
