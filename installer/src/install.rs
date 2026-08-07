@@ -13,11 +13,13 @@ use std::path::{Path, PathBuf};
 
 /// Windows registry key under which Add/Remove Programs looks for per-user
 /// entries. HKCU, not HKLM — the machine-wide equivalent needs admin.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub const UNINSTALL_KEY: &str =
     r"Software\Microsoft\Windows\CurrentVersion\Uninstall\LunarLauncher";
 
 pub const PRODUCT_NAME: &str = "Lunar Launcher";
 pub const MAIN_EXE: &str = "lunarlauncher.exe";
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The archive of everything to install, embedded at build time.
@@ -55,6 +57,24 @@ pub fn run(report: impl Fn(Progress)) {
 
 fn install(report: &impl Fn(Progress)) -> Result<PathBuf, String> {
     let dir = install_dir();
+
+    // An existing install is replaced, not merged into.
+    //
+    // Merging is what leaves a machine running one version's exe beside
+    // another version's resources — which fails at runtime, far from here, and
+    // looks like a corrupt download rather than a bad upgrade. Old files are
+    // cleared first so what remains is exactly this payload.
+    if let Some(previous) = existing_install() {
+        report(Progress::Step(0.0, "Removing the previous version".into()));
+        if is_running(&previous.join(MAIN_EXE)) {
+            return Err(format!(
+                "{PRODUCT_NAME} is already running. Close it and run this installer again — \
+                 its files cannot be replaced while it is open."
+            ));
+        }
+        clear_install(&previous);
+    }
+
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
 
     let reader = std::io::Cursor::new(PAYLOAD);
@@ -115,6 +135,62 @@ fn install(report: &impl Fn(Progress)) -> Result<PathBuf, String> {
     Ok(exe)
 }
 
+/// Where a previous install put itself, if there is one.
+///
+/// Read from the registry rather than assumed to be `install_dir()`: an older
+/// build may have installed elsewhere, and guessing would leave that copy on
+/// disk still registered in Add/Remove Programs.
+#[cfg(target_os = "windows")]
+fn existing_install() -> Option<PathBuf> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(UNINSTALL_KEY)
+        .ok()?;
+    let loc: String = key.get_value("InstallLocation").ok()?;
+    let path = PathBuf::from(loc);
+    path.is_dir().then_some(path)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn existing_install() -> Option<PathBuf> {
+    None
+}
+
+/// Whether an executable is running, tested by trying to open it for writing.
+///
+/// Windows holds a mandatory lock on a running image, so this is the check
+/// that matters: without it the install fails partway through with a per-file
+/// permission error rather than one sentence naming the cause.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_running(exe: &Path) -> bool {
+    exe.exists()
+        && std::fs::OpenOptions::new()
+            .write(true)
+            .open(exe)
+            .is_err()
+}
+
+/// Remove a previous install's files, keeping the uninstaller in place — on an
+/// upgrade it may be the process doing the removing.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn clear_install(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.file_name().is_some_and(|n| n == "uninstall.exe") {
+            continue;
+        }
+        let _ = if path.is_dir() {
+            std::fs::remove_dir_all(&path)
+        } else {
+            std::fs::remove_file(&path)
+        };
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn register(dir: &Path, exe: &Path) -> Result<(), String> {
     use winreg::enums::*;
@@ -167,6 +243,7 @@ fn register(_dir: &Path, _exe: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn walk_size(dir: &Path) -> u64 {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;

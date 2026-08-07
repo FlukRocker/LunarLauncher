@@ -36,7 +36,6 @@ const REDSTONE: Color = Color::from_rgb(1.000, 0.239, 0.310); // #ff3d4f
 enum Message {
     Progress(install::Progress),
     Launch,
-    Quit,
 }
 
 enum Stage {
@@ -84,7 +83,6 @@ impl Installer {
                 }
                 iced::exit()
             }
-            Message::Quit => iced::exit(),
         }
     }
 
@@ -110,7 +108,13 @@ impl Installer {
         let body: Element<'_, Message> = match &self.stage {
             Stage::Working { fraction, detail } => column![
                 text("INSTALLING").size(22).color(INK),
-                progress_bar(0.0..=1.0, *fraction).style(|_: &Theme| progress_bar::Style {
+                // The closure parameter is deliberately unannotated. Writing
+                // `|_: &Theme|` binds it to one concrete lifetime rather than
+                // leaving it higher-ranked, and `iced::application` then
+                // rejects the whole `view` with "implementation of `Fn` is not
+                // general enough" — an error that points at the builder call
+                // and says nothing about this line.
+                progress_bar(0.0..=1.0, *fraction).style(|_| progress_bar::Style {
                     background: Background::Color(Color::from_rgb(0.06, 0.08, 0.10)),
                     bar: Background::Color(EMERALD),
                     border: Default::default(),
@@ -179,6 +183,17 @@ impl Installer {
     }
 }
 
+/// A function item, not the closure `|_| Theme::Dark`.
+///
+/// A closure taking `&Installer` is inferred at one concrete lifetime, and
+/// `iced::application` needs it to hold for any — so the closure form fails
+/// with "implementation of `FnOnce` is not general enough", reported against
+/// the whole builder chain rather than against the theme argument. A `fn` is
+/// higher-ranked by construction.
+fn theme(_: &Installer) -> Theme {
+    Theme::Dark
+}
+
 fn main() -> iced::Result {
     // Uninstall is the same binary under a flag, so there is no second
     // executable to build, sign and keep in step.
@@ -197,6 +212,6 @@ fn main() -> iced::Result {
         .window_size((460.0, 240.0))
         .resizable(false)
         .subscription(Installer::subscription)
-        .theme(|_| Theme::Dark)
+        .theme(theme)
         .run()
 }

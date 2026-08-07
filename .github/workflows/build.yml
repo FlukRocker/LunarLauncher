@@ -86,6 +86,52 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run app:build -- --target ${{ matrix.target }}
 
+      # Windows gets no installer from `tauri build` any more — NSIS is gone.
+      # The launcher exe is zipped into the installer crate as its payload and
+      # compiled in, producing one self-contained Setup.exe.
+      #
+      # Only the exe is packed. Tauri's release directory also holds deps/,
+      # build/ and every intermediate object; packing the directory would
+      # embed hundreds of megabytes of build detritus in the installer.
+      - name: Build installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $rel = "src-tauri/target/${{ matrix.target }}/release"
+          Compress-Archive -Path "$rel/lunarlauncher.exe" -DestinationPath installer/payload.zip -Force
+          cargo build --release --manifest-path installer/Cargo.toml
+          New-Item -ItemType Directory -Force -Path dist-installer | Out-Null
+          Copy-Item installer/target/release/LunarLauncherSetup.exe `
+                    "dist-installer/Lunar Launcher Setup.exe"
+
+      # Authenticode, which is what stops SmartScreen warning on download. It
+      # is unrelated to the updater's minisign key: that proves an update came
+      # from us, this proves the *installer* did.
+      #
+      # Skipped when no certificate is configured rather than failing the
+      # build, so an unsigned installer is still produced while the
+      # certificate question is open — but it says so, because an unsigned
+      # build that looks identical to a signed one is how an unsigned release
+      # ships by accident.
+      - name: Sign installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if (-not $env:CERT_BASE64) {
+            Write-Host "::warning::No WINDOWS_CERT_BASE64 secret; the installer is UNSIGNED and will trigger SmartScreen."
+            exit 0
+          }
+          [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:CERT_BASE64))
+          $st = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+                Where-Object { $_.FullName -match 'x64' } | Select-Object -First 1
+          & $st.FullName sign /fd SHA256 /f cert.pfx /p $env:CERT_PASSWORD `
+              /tr http://timestamp.digicert.com /td SHA256 "dist-installer/Lunar Launcher Setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signing failed" }
+          Remove-Item cert.pfx
+
       # Without this the installers are built and then discarded with the
       # runner. Bundle output lands under a per-target directory, so the glob
       # has to include the target.
@@ -103,9 +149,7 @@ jobs:
           # The updater archives (.nsis.zip, .app.tar.gz) are what the updater
           # actually downloads — the installer itself is for a human.
           path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.sig
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip
+            dist-installer/*
             src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
             src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.sig
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
