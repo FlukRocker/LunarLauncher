@@ -80,11 +80,18 @@ jobs:
           # authorize URL every user's browser sees. The *secret* is what must
           # never exist for a public client, and none was created.
           #
-          # This only works once Mojang has approved the registration for the
-          # Minecraft Services API. Until then it authenticates with Microsoft
-          # and Xbox Live and is then refused by Minecraft with a 403, which is
-          # indistinguishable on screen from an account problem.
-          LUNAR_AZURE_CLIENT_ID: c28eb326-e12c-4344-b8af-d5fd88aa14a4
+          # Commented out, not deleted: this registration is confirmed to
+          # reach Minecraft and be refused with "Invalid app registration",
+          # which is what an unapproved app gets. Restore the line once Mojang
+          # has approved it — see https://aka.ms/AppRegInfo.
+          #
+          # Reverted to Helios's approved id so the next run answers the one
+          # question still open: whether the *original* 403, whose body we were
+          # discarding, was this same message or something about the account.
+          # Two different messages means the account is fine; the same message
+          # means the approved id is being refused too, which is a much bigger
+          # problem than a pending application.
+          # LUNAR_AZURE_CLIENT_ID: c28eb326-e12c-4344-b8af-d5fd88aa14a4
           # Required because bundle.createUpdaterArtifacts is on: the bundler
           # finds a public key in tauri.conf.json and refuses to produce an
           # unsigned update artifact next to it. Without the secret this step
