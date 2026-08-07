@@ -94,18 +94,14 @@
 }
 
 .cyber__mark {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     flex: none;
-    background: var(--cnm-grad);
-    box-shadow: var(--cnm-glow-emerald);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--cnm-font-mono);
-    font-size: 0.52rem;
-    font-weight: 700;
-    color: var(--cnm-text-invert);
+    /* The logo carries the brand gradient itself, so the tile behind it is
+       gone — a gradient on a gradient muddies both. The glow stays, because
+       every branded element in the design has one. */
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(53, 217, 122, 0.35));
 }
 
 .cyber__brand {

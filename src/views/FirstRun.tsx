@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { api, type Server, type Settings } from '../lib/api'
+import logo from '../assets/images/CyberLogo.png'
 
 /**
  * First-run setup, in the Cyber Network design.
@@ -104,7 +105,7 @@ export function FirstRun({ onDone }: { onDone: () => void }) {
         <div className="cyber">
             <div className="cyber__frame" role="dialog" aria-label="First-run setup">
                 <header className="cyber__header">
-                    <div className="cyber__mark">CN</div>
+                    <img className="cyber__mark" src={logo} alt="" aria-hidden="true" />
                     <div className="cyber__brand">
                         <span className="cyber__brandName">Cyber Network</span>
                         <span className="cyber__brandSub">

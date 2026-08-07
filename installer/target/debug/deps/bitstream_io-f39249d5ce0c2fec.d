@@ -1,0 +1,10 @@
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/debug/deps/bitstream_io-f39249d5ce0c2fec.d: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/huffman.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/read.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/write.rs
+
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/debug/deps/libbitstream_io-f39249d5ce0c2fec.rlib: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/huffman.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/read.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/write.rs
+
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/debug/deps/libbitstream_io-f39249d5ce0c2fec.rmeta: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/huffman.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/read.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/write.rs
+
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/lib.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/huffman.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/read.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitstream-io-4.10.0/src/write.rs:

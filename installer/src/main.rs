@@ -19,7 +19,7 @@
 
 mod install;
 
-use iced::widget::{button, column, container, mouse_area, progress_bar, row, text, Space};
+use iced::widget::{button, column, image, mouse_area, container, progress_bar, row, text, Space};
 use iced::{gradient, window, Alignment, Background, Border, Color, Element, Length, Radians, Subscription, Task, Theme};
 
 // --- Cyber Network palette --------------------------------------------------
@@ -49,6 +49,9 @@ fn brand_gradient() -> Background {
             .into(),
     )
 }
+
+/// The brand mark, compiled in. See `mark` in `view`.
+const LOGO: &[u8] = include_bytes!("../assets/logo.png");
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -139,15 +142,10 @@ impl Installer {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let mark = container(text("CN").size(11).color(BG))
-            .width(26)
-            .height(26)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center)
-            .style(|_| container::Style {
-                background: Some(brand_gradient()),
-                ..Default::default()
-            });
+        // The real mark, embedded rather than loaded from disk: the installer
+        // runs before anything of ours exists on the machine, so there is no
+        // file to read.
+        let mark = image(image::Handle::from_bytes(LOGO)).width(30).height(30);
 
         let brand = column![
             text("CYBER NETWORK").size(15).color(INK),

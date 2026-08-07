@@ -1,0 +1,10 @@
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/release/deps/avif_serialize-f173c3612c8e503d.d: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/boxes.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/constants.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/writer.rs
+
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/release/deps/libavif_serialize-f173c3612c8e503d.rlib: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/boxes.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/constants.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/writer.rs
+
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/release/deps/libavif_serialize-f173c3612c8e503d.rmeta: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/boxes.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/constants.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/writer.rs
+
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/lib.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/boxes.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/constants.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.9/src/writer.rs:

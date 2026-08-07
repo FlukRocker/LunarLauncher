@@ -18,7 +18,7 @@ path = "src/main.rs"
 # bar, and a GPU stack would add megabytes to a download people judge by size
 # — and fail outright on machines with no usable GPU driver, which is exactly
 # the population that needs an installer to just work.
-iced = { version = "0.14", default-features = false, features = ["tiny-skia", "tokio"] }
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "tokio", "image"] }
 tokio = { version = "1", features = ["sync"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
