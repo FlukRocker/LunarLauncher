@@ -1,0 +1,9 @@
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/debug/deps/futures_macro-944619f0e27e409c.d: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/executor.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/join.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/select.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/stream_select.rs
+
+/Users/flukrocker/work/github-repo/LunarLauncher/installer/target/debug/deps/libfutures_macro-944619f0e27e409c.dylib: /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/lib.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/executor.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/join.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/select.rs /Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/stream_select.rs
+
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/lib.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/executor.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/join.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/select.rs:
+/Users/flukrocker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.33/src/stream_select.rs:

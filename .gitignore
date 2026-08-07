@@ -19,3 +19,4 @@ src-tauri/gen/
 .env.*.local
 # Generated from the environment by scripts/brand.mjs on every branded build.
 src-tauri/tauri.brand.json
+installer/payload.zip

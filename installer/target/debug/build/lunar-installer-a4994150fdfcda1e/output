@@ -1,0 +1,1 @@
+cargo:rerun-if-changed=/Users/flukrocker/work/github-repo/LunarLauncher/installer/payload.zip

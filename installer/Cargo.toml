@@ -1,0 +1,42 @@
+[package]
+name = "lunar-installer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "First-install experience for Lunar Launcher"
+publish = false
+
+# Its own crate, not a target inside src-tauri: this binary must not link Tauri,
+# a webview, or any of the launcher's dependencies. It runs before the launcher
+# exists on disk.
+[[bin]]
+name = "LunarLauncherSetup"
+path = "src/main.rs"
+
+[dependencies]
+# tiny-skia rather than the default wgpu backend: this window is a progress
+# bar, and a GPU stack would add megabytes to a download people judge by size
+# — and fail outright on machines with no usable GPU driver, which is exactly
+# the population that needs an installer to just work.
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "tokio"] }
+tokio = { version = "1", features = ["sync"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.56"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_System_Com_StructuredStorage",
+] }
+
+[profile.release]
+# The installer is downloaded before anyone has decided to trust it, so its
+# size is the first thing a user judges. Nothing debuggable ships either.
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
