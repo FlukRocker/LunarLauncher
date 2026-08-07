@@ -80,18 +80,16 @@ jobs:
           # authorize URL every user's browser sees. The *secret* is what must
           # never exist for a public client, and none was created.
           #
-          # Commented out, not deleted: this registration is confirmed to
-          # reach Minecraft and be refused with "Invalid app registration",
-          # which is what an unapproved app gets. Restore the line once Mojang
-          # has approved it — see https://aka.ms/AppRegInfo.
+          # The "Cyber Launcher" registration: personal accounts only,
+          # http://localhost as a public client, public client flows enabled.
           #
-          # Reverted to Helios's approved id so the next run answers the one
-          # question still open: whether the *original* 403, whose body we were
-          # discarding, was this same message or something about the account.
-          # Two different messages means the account is fine; the same message
-          # means the approved id is being refused too, which is a much bigger
-          # problem than a pending application.
-          # LUNAR_AZURE_CLIENT_ID: c28eb326-e12c-4344-b8af-d5fd88aa14a4
+          # An earlier id was tested and refused with "Invalid app
+          # registration", and that was read as proof approval is required.
+          # It proved less than it looked: that id belonged to a different
+          # registration with none of this configured, so the message equally
+          # meant "not set up for this". This is the configured one, so its
+          # answer is the one worth trusting.
+          LUNAR_AZURE_CLIENT_ID: 5179a67e-bf3b-40ae-9ff2-3fcdd1ffd8bf
           # Required because bundle.createUpdaterArtifacts is on: the bundler
           # finds a public key in tauri.conf.json and refuses to produce an
           # unsigned update artifact next to it. Without the secret this step
