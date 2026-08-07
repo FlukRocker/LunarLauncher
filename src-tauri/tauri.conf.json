@@ -29,7 +29,6 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": [
-      "nsis",
       "dmg",
       "appimage"
     ],
@@ -46,20 +45,7 @@
     "licenseFile": "../LICENSE.txt",
     "category": "Game",
     "shortDescription": "Modded Minecraft Launcher",
-    "longDescription": "Custom launcher which allows users to join modded servers. All mods, configurations, and updates are handled automatically.",
-    "windows": {
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "installMode": "currentUser",
-        "languages": [
-          "English"
-        ],
-        "displayLanguageSelector": false,
-        "startMenuFolder": "Lunar Launcher",
-        "compression": "lzma",
-        "template": "installer/installer.nsi"
-      }
-    }
+    "longDescription": "Custom launcher which allows users to join modded servers. All mods, configurations, and updates are handled automatically."
   },
   "plugins": {
     "updater": {

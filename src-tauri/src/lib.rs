@@ -261,7 +261,34 @@ pub fn run() {
 /// every launch made a request that could only fail — while adding startup
 /// work on a path that has to be reliable. Flip it on together with the
 /// endpoint, not before.
+#[cfg(target_os = "windows")]
 fn check_for_updates(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        // Velopack's calls block, so the check runs off the async runtime for
+        // the same reason the install does.
+        let found = tokio::task::spawn_blocking(|| {
+            let source = velopack::sources::HttpSource::new(updater::feed_url());
+            let um = velopack::UpdateManager::new(source, None, None)?;
+            um.check_for_updates()
+        })
+        .await;
+
+        match found {
+            Ok(Ok(velopack::UpdateCheck::UpdateAvailable(update))) => {
+                // Reported rather than installed. Silently replacing the binary
+                // under a user who is mid-session is a decision for the UI to
+                // offer, not for startup to take.
+                tracing::info!(version = %update.TargetFullRelease.Version, "An update is available.");
+                updater::announce(&app, update);
+            }
+            Ok(Ok(_)) => tracing::info!("Launcher is up to date."),
+            Ok(Err(err)) => tracing::warn!(%err, "Update check failed; continuing."),
+            Err(err) => tracing::warn!(%err, "Update check task failed; continuing."),
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]fn check_for_updates(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         use tauri_plugin_updater::UpdaterExt;
 

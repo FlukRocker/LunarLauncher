@@ -78,3 +78,13 @@ keyring = { version = "3", features = ["apple-native", "windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+# Windows install and update, replacing NSIS and tauri-plugin-updater there.
+#
+# Windows only, deliberately. Velopack supports all three platforms, but every
+# install this project has ever tested is Windows, and migrating macOS and
+# Linux at the same time would mean changing three packaging pipelines at once
+# with no way to verify any of them. The other two keep the Tauri updater until
+# this is proven on Windows.
+[target.'cfg(target_os = "windows")'.dependencies]
+velopack = "1.2"

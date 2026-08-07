@@ -27,7 +27,7 @@ pub struct AppState {
     /// An update found by the startup check, waiting for the user to accept.
     /// The handle stays in Rust — nothing the webview sends chooses what gets
     /// installed.
-    pub pending_update: std::sync::Mutex<Option<tauri_plugin_updater::Update>>,
+    pub pending_update: std::sync::Mutex<Option<crate::updater::PendingUpdate>>,
     /// Set for the duration of an install, so a second click cannot start a
     /// concurrent download of the same bytes.
     pub update_installing: std::sync::atomic::AtomicBool,

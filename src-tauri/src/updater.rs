@@ -24,6 +24,22 @@ use tauri::{Emitter, Manager};
 
 use crate::error::{Error, Result};
 
+/// The handle to a discovered update, whatever produced it.
+///
+/// Windows is migrating to Velopack — the Discord/Slack install model, where a
+/// single Setup.exe writes to %LOCALAPPDATA% and updates arrive as deltas.
+/// macOS and Linux stay on the Tauri updater until that is proven on Windows,
+/// because migrating three packaging pipelines at once would leave none of
+/// them verifiable.
+///
+/// Everything above this line is unchanged by that split: the frontend sees
+/// the same `UpdateInfo`, the same `update://available` event and the same
+/// three commands whichever backend answered.
+#[cfg(target_os = "windows")]
+pub type PendingUpdate = velopack::UpdateInfo;
+#[cfg(not(target_os = "windows"))]
+pub type PendingUpdate = tauri_plugin_updater::Update;
+
 /// What the frontend needs to describe an update. The `Update` handle itself
 /// stays in Rust; nothing the webview sends can influence what gets installed.
 #[derive(Debug, Clone, Serialize)]
@@ -38,6 +54,7 @@ pub struct UpdateInfo {
     pub pub_date: Option<String>,
 }
 
+#[cfg(not(target_os = "windows"))]
 impl From<&tauri_plugin_updater::Update> for UpdateInfo {
     fn from(u: &tauri_plugin_updater::Update) -> Self {
         Self {
@@ -45,6 +62,19 @@ impl From<&tauri_plugin_updater::Update> for UpdateInfo {
             current_version: u.current_version.clone(),
             notes: u.body.clone(),
             pub_date: u.date.map(|d| d.to_string()),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<&velopack::UpdateInfo> for UpdateInfo {
+    fn from(u: &velopack::UpdateInfo) -> Self {
+        let rel = &u.TargetFullRelease;
+        Self {
+            version: rel.Version.clone(),
+            current_version: env!("CARGO_PKG_VERSION").to_string(),
+            notes: Some(rel.NotesMarkdown.clone()).filter(|n| !n.trim().is_empty()),
+            pub_date: None,
         }
     }
 }
@@ -93,13 +123,92 @@ pub async fn install(app: tauri::AppHandle, state: &crate::commands::AppState) -
         return Err(Error::Other("No update is pending.".into()));
     };
 
-    tracing::info!(version = %update.version, "Installing launcher update");
+    let info = UpdateInfo::from(&update);
+    tracing::info!(version = %info.version, "Installing launcher update");
 
+    match apply(&app, update, state).await {
+        Ok(()) => {
+            // Reached only where the installer does not replace the process
+            // itself. On Windows neither backend returns here.
+            app.restart();
+        }
+        Err(err) => {
+            state
+                .update_installing
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            // A verification failure is not a transport failure, and the
+            // difference decides whether the user should retry or stop.
+            let lower = err.to_lowercase();
+            let message = if lower.contains("signature") || lower.contains("verif") {
+                format!(
+                    "The update could not be verified and was not installed. Its signature does \
+                     not match this launcher's key, so it may have been tampered with or built \
+                     by someone else. ({err})"
+                )
+            } else {
+                format!("The update could not be installed: {err}")
+            };
+            tracing::error!(%err, "Launcher update failed");
+            Err(Error::Other(message))
+        }
+    }
+}
+
+/// Where Velopack reads its release feed from.
+///
+/// A plain directory served over HTTP — Velopack reads `releases.win.json` and
+/// the packages beside it. That is simpler than the endpoint the Tauri updater
+/// needed, which had to answer per-target and per-version.
+#[cfg(target_os = "windows")]
+pub fn feed_url() -> String {
+    std::env::var("LUNAR_UPDATE_FEED")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| option_env!("LUNAR_UPDATE_FEED").map(str::to_string))
+        .unwrap_or_else(|| "http://192.168.1.115:8080/releases".to_string())
+}
+
+/// Windows: Velopack.
+///
+/// Its calls are blocking and the apply step replaces the process, so the whole
+/// sequence runs on a blocking thread rather than on a Tokio worker, where it
+/// would stall every other task in the runtime for the length of a download.
+#[cfg(target_os = "windows")]
+async fn apply(
+    _app: &tauri::AppHandle,
+    update: PendingUpdate,
+    state: &crate::commands::AppState,
+) -> std::result::Result<(), String> {
+    let log_guard = state.log_guard.clone();
+    tokio::task::spawn_blocking(move || {
+        let source = velopack::sources::HttpSource::new(feed_url());
+        let um = velopack::UpdateManager::new(source, None, None).map_err(|e| e.to_string())?;
+        um.download_updates(&update, None).map_err(|e| e.to_string())?;
+
+        // The point of no return: apply replaces this process. Flush the log
+        // now, because nothing after this is guaranteed to reach disk and it is
+        // exactly the evidence needed when an update fails.
+        tracing::info!("Download complete; handing over to Velopack");
+        drop(log_guard.lock().unwrap().take());
+
+        um.apply_updates_and_restart(&update).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Everything else: the Tauri updater, unchanged.
+#[cfg(not(target_os = "windows"))]
+async fn apply(
+    app: &tauri::AppHandle,
+    update: PendingUpdate,
+    state: &crate::commands::AppState,
+) -> std::result::Result<(), String> {
     let handle = app.clone();
     let mut downloaded: u64 = 0;
     let log_guard = state.log_guard.clone();
 
-    let result = update
+    update
         .download_and_install(
             move |chunk, total| {
                 downloaded += chunk as u64;
@@ -116,54 +225,14 @@ pub async fn install(app: tauri::AppHandle, state: &crate::commands::AppState) -
                 );
             },
             move || {
-                // The point of no return. Past here the installer may terminate
-                // this process at any moment, so the log is flushed now —
-                // dropping the guard stops the writer thread and writes out
-                // everything still buffered. Nothing after this is guaranteed
-                // to reach disk.
                 tracing::info!("Download complete; handing over to the installer");
                 drop(log_guard.lock().unwrap().take());
             },
         )
-        .await;
-
-    match result {
-        Ok(()) => {
-            // Reached only where the installer does not replace the process
-            // itself; on Windows NSIS this line never runs.
-            app.restart();
-        }
-        Err(err) => {
-            state
-                .update_installing
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-            // A verification failure is not a transport failure, and the
-            // difference decides whether the user should retry or stop.
-            let message = if is_signature_failure(&err) {
-                format!(
-                    "The update could not be verified and was not installed. Its signature does \
-                     not match this launcher's key, so it may have been tampered with or built \
-                     by someone else. ({err})"
-                )
-            } else {
-                format!("The update could not be installed: {err}")
-            };
-            tracing::error!(%err, "Launcher update failed");
-            Err(Error::Other(message))
-        }
-    }
+        .await
+        .map_err(|e| e.to_string())
 }
 
-/// Whether an updater error is a signature rejection rather than a network or
-/// filesystem problem.
-///
-/// Matched on the message because the plugin models both as one opaque error
-/// variant. Fragile by nature, so it only ever *improves* the wording — a miss
-/// still reports the failure, it just does not name the cause.
-fn is_signature_failure(err: &tauri_plugin_updater::Error) -> bool {
-    let text = err.to_string().to_lowercase();
-    text.contains("signature") || text.contains("verif")
-}
 
 /// Record a discovered update and tell the frontend.
 pub fn announce(app: &tauri::AppHandle, update: tauri_plugin_updater::Update) {
