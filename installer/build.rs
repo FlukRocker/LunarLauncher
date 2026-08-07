@@ -7,6 +7,48 @@
 
 use std::path::Path;
 
+/// Embed the Cyber Launcher icon and version strings into Setup.exe.
+///
+/// Shares `icon.ico` with the launcher rather than keeping a second copy, so
+/// regenerating the app icons cannot leave the installer showing the old mark.
+///
+/// A failure here is a warning, not an error: the resource compiler is part of
+/// the Windows SDK, and a cross-build from Linux may not have one. An installer
+/// with a plain icon still installs, whereas a build that refuses to compile
+/// because of an icon does not.
+#[cfg(target_os = "windows")]
+fn embed_windows_resources(version: &str) {
+    let icon = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("src-tauri/icons/icon.ico");
+    println!("cargo:rerun-if-changed={}", icon.display());
+
+    if !icon.exists() {
+        println!("cargo:warning=no icon.ico; Setup.exe keeps the default icon");
+        return;
+    }
+
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon(&icon.to_string_lossy());
+    res.set("ProductName", "Cyber Launcher");
+    res.set("FileDescription", "Cyber Launcher Setup");
+    res.set("CompanyName", "Cyber Network Group");
+    res.set(
+        "LegalCopyright",
+        "Copyright (c) 2026 Cyber Network Group. Portions (c) 2017-2026 Daniel D. Scalzi. MIT.",
+    );
+    res.set("ProductVersion", version);
+    res.set("FileVersion", version);
+
+    if let Err(err) = res.compile() {
+        println!("cargo:warning=could not embed Windows resources ({err}); icon not set");
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn embed_windows_resources(_version: &str) {}
+
 fn main() {
     // The version shown to the user is the *launcher's*, read from the same
     // tauri.conf.json the launcher builds from. `CARGO_PKG_VERSION` here is
@@ -29,6 +71,8 @@ fn main() {
         })
         .unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=LUNAR_VERSION={version}");
+
+    embed_windows_resources(&version);
 
     let payload = Path::new(env!("CARGO_MANIFEST_DIR")).join("payload.zip");
     println!("cargo:rerun-if-changed={}", payload.display());

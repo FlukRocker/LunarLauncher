@@ -53,6 +53,80 @@ fn brand_gradient() -> Background {
 /// The brand mark, compiled in. See `mark` in `view`.
 const LOGO: &[u8] = include_bytes!("../assets/logo.png");
 
+/// `--cnm-line`: the hairline every panel in the design is bounded by.
+const LINE: Color = Color::from_rgba(0.431, 0.784, 0.706, 0.16);
+
+fn hairline() -> Border {
+    Border { color: LINE, width: 1.0, radius: 0.0.into() }
+}
+
+/// A 1px horizontal rule.
+///
+/// Drawn as its own element rather than as a border, because iced borders
+/// apply to all four edges — a border here would box each section instead of
+/// separating them, and setting the width to zero to avoid that left the
+/// design's hairlines missing entirely.
+fn rule() -> Element<'static, Message> {
+    container(Space::new().height(1))
+        .width(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(Background::Color(LINE)),
+            ..Default::default()
+        })
+        .into()
+}
+
+fn kv(k: &'static str, v: String) -> Element<'static, Message> {
+    row![
+        text(k).size(10).color(MUTE).width(120),
+        text(v).size(12).color(INK),
+    ]
+    .align_y(Alignment::Start)
+    .into()
+}
+
+fn step_chip(num: &'static str, name: &'static str, now: usize, index: usize) -> Element<'static, Message> {
+    let current = now == index;
+    let chip = container(
+        text(num)
+            .size(10)
+            .color(if current { BG } else { MUTE }),
+    )
+    .width(24)
+    .height(24)
+    .align_x(Alignment::Center)
+    .align_y(Alignment::Center)
+    .style(move |_| container::Style {
+        background: Some(if current {
+            brand_gradient()
+        } else {
+            Background::Color(Color::from_rgba(0.016, 0.027, 0.039, 0.6))
+        }),
+        border: if current { Border::default() } else { hairline() },
+        ..Default::default()
+    });
+
+    row![
+        chip,
+        text(name).size(11).color(if current { INK } else { MUTE }),
+    ]
+    .spacing(10)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn primary(label: &'static str, on_press: Message) -> button::Button<'static, Message> {
+    button(text(label).size(12).color(BG))
+        .on_press(on_press)
+        .padding([10, 24])
+        .style(|_, _| button::Style {
+            background: Some(brand_gradient()),
+            text_color: BG,
+            border: Border::default(),
+            ..Default::default()
+        })
+}
+
 #[derive(Debug, Clone)]
 enum Message {
     Install,
@@ -142,16 +216,35 @@ impl Installer {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        // The real mark, embedded rather than loaded from disk: the installer
-        // runs before anything of ours exists on the machine, so there is no
-        // file to read.
-        let mark = image(image::Handle::from_bytes(LOGO)).width(30).height(30);
+        // Laid out to the artifact's own measurements: an 820px frame, a 56px
+        // header, a 52px step rail, a 326px body and a footer — rather than
+        // the palette alone on an arbitrary window.
+        let mark = image(image::Handle::from_bytes(LOGO)).width(28).height(28);
 
         let brand = column![
             text("CYBER NETWORK").size(15).color(INK),
             text("CYBER LAUNCHER SETUP").size(9).color(MUTE),
         ]
         .spacing(3);
+
+        let pill = container(
+            row![
+                container(Space::new().width(6).height(6)).style(|_| container::Style {
+                    background: Some(Background::Color(EMERALD)),
+                    ..Default::default()
+                }),
+                text(if matches!(self.stage, Stage::Done(_)) { "INSTALLED" } else { "READY" })
+                    .size(10)
+                    .color(DIM),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+        .padding([6, 12])
+        .style(|_| container::Style {
+            border: hairline(),
+            ..Default::default()
+        });
 
         let close = button(text("\u{2715}").size(13).color(MUTE))
             .on_press(Message::Close)
@@ -163,114 +256,134 @@ impl Installer {
                 ..Default::default()
             });
 
-        // The whole header drags the window. Without decorations there is no
-        // system title bar to grab, and a dialog that cannot be moved off
-        // whatever it opened on top of is worse than one with a mismatched bar.
         let header = mouse_area(
-            row![mark, brand, Space::new().width(Length::Fill), close]
-                .spacing(12)
-                .align_y(Alignment::Center),
+            container(
+                row![mark, brand, Space::new().width(Length::Fill), pill, close]
+                    .spacing(12)
+                    .align_y(Alignment::Center),
+            )
+            .height(56)
+            .padding([0, 24]),
         )
         .on_press(Message::Drag);
 
-        let kv = |k: &'static str, v: String| {
+        // Two steps, in the rail the design uses for four. An installer that
+        // showed no progression at all would drop the most recognisable
+        // element of the chrome.
+        let step_now = if matches!(self.stage, Stage::Confirm | Stage::Blocked) { 0 } else { 1 };
+        let rail = container(
             row![
-                text(k).size(10).color(MUTE).width(110),
-                text(v).size(12).color(INK),
+                step_chip("01", "CONFIRM", step_now, 0),
+                text("\u{203A}").size(14).color(MUTE),
+                step_chip("02", "INSTALL", step_now, 1),
+                Space::new().width(Length::Fill),
+                text(format!("STEP {} OF 2", step_now + 1)).size(10).color(MUTE),
             ]
-            .align_y(Alignment::Center)
+            .spacing(14)
+            .align_y(Alignment::Center),
+        )
+        .height(52)
+        .padding([0, 24])
+        .style(|_| container::Style {
+            background: Some(Background::Color(Color::from_rgba(0.016, 0.027, 0.039, 0.45))),
+            ..Default::default()
+        });
+
+        let (eyebrow, title, title_colour) = match &self.stage {
+            Stage::Confirm => ("// 01_CONFIRM_TARGET", "READY TO INSTALL", INK),
+            Stage::Blocked => ("// 01_CONFIRM_TARGET", "CLOSE CYBER LAUNCHER", GOLD),
+            Stage::Working { .. } => ("// 02_WRITE_FILES", "INSTALLING", INK),
+            Stage::Done(_) => ("// 02_WRITE_FILES", "INSTALLED", INK),
+            Stage::Failed(_) => ("// 02_WRITE_FILES", "INSTALL FAILED", REDSTONE),
         };
 
-        let body: Element<'_, Message> = match &self.stage {
-            Stage::Blocked => column![
-                text("CLOSE LUNAR LAUNCHER").size(22).color(GOLD),
-                text(
-                    "It is running, and its files cannot be replaced while it is open. \
-                     The installer can close it for you."
-                )
-                .size(12)
-                .color(DIM),
-                button(text("CLOSE IT AND INSTALL").size(13).color(BG))
-                    .on_press(Message::CloseAndInstall)
-                    .padding([10, 26])
-                    .style(|_, _| button::Style {
-                        background: Some(brand_gradient()),
-                        text_color: BG,
-                        border: Border::default(),
-                        ..Default::default()
-                    }),
+        let inner: Element<'_, Message> = match &self.stage {
+            Stage::Confirm => column![
+                kv("DESTINATION", install::install_dir().to_string_lossy().to_string()),
+                kv("VERSION", install::VERSION.to_string()),
+                kv("SIZE", format!("{:.0} MB", install::PAYLOAD.len() as f64 / 1_048_576.0)),
             ]
-            .spacing(16)
+            .spacing(10)
             .into(),
 
-            Stage::Confirm => column![
-                text("READY TO INSTALL").size(22).color(INK),
-                column![
-                    kv("DESTINATION", install::install_dir().to_string_lossy().to_string()),
-                    kv("VERSION", install::VERSION.to_string()),
-                    kv("SIZE", format!("{:.0} MB", install::PAYLOAD.len() as f64 / 1_048_576.0)),
-                ]
-                .spacing(6),
-                button(text("INSTALL").size(13).color(BG))
-                    .on_press(Message::Install)
-                    .padding([10, 26])
-                    .style(|_, _| button::Style {
-                        background: Some(brand_gradient()),
-                        text_color: BG,
-                        border: Border::default(),
-                        ..Default::default()
-                    }),
-            ]
-            .spacing(16)
+            Stage::Blocked => text(
+                "It is running, and its files cannot be replaced while it is open. \
+                 The installer can close it for you.",
+            )
+            .size(12)
+            .color(DIM)
             .into(),
 
             Stage::Working { fraction, detail } => column![
-                text("INSTALLING").size(22).color(INK),
-                // The closure parameter is deliberately unannotated. Writing
-                // `|_: &Theme|` binds it to one concrete lifetime rather than
-                // leaving it higher-ranked, and `iced::application` then
-                // rejects the whole `view` with "implementation of `Fn` is not
-                // general enough" — an error that points at the builder call
-                // and says nothing about this line.
                 progress_bar(0.0..=1.0, *fraction).style(|_| progress_bar::Style {
                     background: Background::Color(Color::from_rgb(0.06, 0.08, 0.10)),
                     bar: Background::Color(EMERALD),
-                    border: Default::default(),
+                    border: Border::default(),
                 }),
                 text(detail.clone()).size(11).color(DIM),
             ]
-            .spacing(14)
+            .spacing(12)
             .into(),
 
-            Stage::Done(_) => column![
-                text("INSTALLED").size(22).color(INK),
-                text("Starting Cyber Launcher…").size(11).color(DIM),
-            ]
-            .spacing(10)
-            .into(),
-
-            Stage::Failed(err) => column![
-                text("INSTALL FAILED").size(22).color(REDSTONE),
-                // Shown in full rather than summarised: this window is the only
-                // place the reason ever appears, and there is no log yet —
-                // nothing has been installed to write one.
-                text(err.clone()).size(11).color(DIM),
-            ]
-            .spacing(10)
-            .into(),
+            Stage::Done(_) => text("Starting Cyber Launcher\u{2026}").size(12).color(DIM).into(),
+            Stage::Failed(err) => text(err.clone()).size(11).color(DIM).into(),
         };
 
-        container(
-            column![header, body].spacing(28).padding(28).width(Length::Fill),
+        let body = container(
+            column![
+                text(eyebrow).size(10).color(DIAMOND),
+                text(title).size(24).color(title_colour),
+                container(inner)
+                    .width(Length::Fill)
+                    .padding(16)
+                    .style(|_| container::Style {
+                        background: Some(Background::Color(Color::from_rgba(
+                            0.016, 0.027, 0.039, 0.7,
+                        ))),
+                        border: hairline(),
+                        ..Default::default()
+                    }),
+            ]
+            .spacing(12),
         )
-        .width(Length::Fill)
         .height(Length::Fill)
+        .padding(24);
+
+        let action: Element<'_, Message> = match &self.stage {
+            Stage::Confirm => primary("INSTALL", Message::Install).into(),
+            Stage::Blocked => primary("CLOSE IT AND INSTALL", Message::CloseAndInstall).into(),
+            _ => text("").into(),
+        };
+
+        let footer = container(
+            row![
+                text(match self.stage {
+                    Stage::Working { .. } => "WRITING FILES",
+                    _ => "PER-USER INSTALL \u{00B7} NO ADMIN REQUIRED",
+                })
+                .size(10)
+                .color(MUTE),
+                Space::new().width(Length::Fill),
+                action,
+            ]
+            .align_y(Alignment::Center),
+        )
+        .height(64)
+        .padding([0, 24])
         .style(|_| container::Style {
-            background: Some(Background::Color(BG)),
-            text_color: Some(INK),
+            background: Some(Background::Color(Color::from_rgba(0.016, 0.027, 0.039, 0.45))),
             ..Default::default()
-        })
-        .into()
+        });
+
+        container(column![header, rule(), rail, rule(), body, rule(), footer])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(BG)),
+                text_color: Some(INK),
+                ..Default::default()
+            })
+            .into()
     }
 
     /// Runs the install on a worker thread and streams progress in.
@@ -327,7 +440,7 @@ fn main() -> iced::Result {
 
     iced::application(Installer::default, Installer::update, Installer::view)
         .title("Cyber Launcher Setup")
-        .window_size((480.0, 320.0))
+        .window_size((820.0, 498.0))
         .resizable(false)
         // No system title bar. Windows paints it with the user's accent
         // colour, which on a dark window is a bright band the design has no

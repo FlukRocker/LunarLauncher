@@ -22,6 +22,13 @@ iced = { version = "0.14", default-features = false, features = ["tiny-skia", "t
 tokio = { version = "1", features = ["sync"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
+# Embeds the icon into Setup.exe itself. Without it the installer carries the
+# default Rust binary icon in Explorer, in the browser's download bar and on
+# the UAC prompt — the three places someone decides whether to trust it, all
+# before the branded window this crate draws ever appears.
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = "0.1"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.56"
 windows = { version = "0.62", features = [
