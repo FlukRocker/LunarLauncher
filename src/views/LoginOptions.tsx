@@ -1,5 +1,30 @@
 import { useState } from 'react'
 import { api, authApi, isApiError } from '../lib/api'
+import { ErrorModal } from '../components/ErrorModal'
+
+/**
+ * Turn a raw sign-in failure into something a player can act on.
+ *
+ * The underlying messages name the HTTP status of an internal exchange, which
+ * is right for a report and useless on screen: a 403 from Minecraft services
+ * almost always means the account has no Java Edition licence, and telling
+ * someone to check that is the difference between a fixable problem and a
+ * dead end.
+ */
+function signInHelp(raw: string): string {
+    if (raw.includes('403')) {
+        return (
+            'This Microsoft account was signed in successfully, but Minecraft refused it. ' +
+            'Almost always this means the account does not own Minecraft: Java Edition — ' +
+            'a Bedrock or Game Pass licence is not enough. Check at minecraft.net that this ' +
+            'is the account that owns the game.'
+        )
+    }
+    if (raw.includes('cancelled') || raw.includes('timed out')) {
+        return 'The sign-in window was closed before it finished. Try again.'
+    }
+    return 'Something went wrong while signing in. The detail below is what to include if you ask for help.'
+}
 
 /** The Microsoft logo, inlined exactly as loginOptions.ejs had it. */
 function MicrosoftIcon() {
@@ -177,7 +202,16 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                         Yggdrasil endpoint in LUNAR_AUTH_SERVER, for servers running
                         authlib-injector or similar.
                     </p>
-                    {error && <p className="panel__error">{error}</p>}
+                    {error && (
+                    <ErrorModal
+                        error={{
+                            title: 'Sign-in failed',
+                            message: signInHelp(error),
+                            detail: error
+                        }}
+                        onClose={() => setError(null)}
+                    />
+                )}
                     <div className="panel__actions">
                         <button
                             type="button"
@@ -217,7 +251,7 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                         disabled={busy}
                         onChange={(e) => setUsername(e.target.value)}
                     />
-                    {error && <p className="panel__error">{error}</p>}
+    
                     <div className="panel__actions">
                         <button
                             type="button"
@@ -252,7 +286,7 @@ export function LoginOptions({ onLoggedIn }: { onLoggedIn: () => void }) {
                     <MicrosoftIcon />
                     <span>Log in with Microsoft</span>
                 </button>
-                {error && <p className="panel__error">{error}</p>}
+
                 <button
                     className="button loginOptionButton"
                     disabled={busy}
